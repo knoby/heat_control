@@ -1,18 +1,15 @@
-/**
- * @Author: Maximilian Brinkmann <KnobY>
- * @Date:   2017-May-12 21:25:24
- * @Email:  maximilian.brinkmann@gmx.net
- * @Project: KeepItWarm
- * @Filename: Config.h
- * @Last modified by:   brinkmannm
- * @Last modified time: 2017-Nov-12 16:18:01
- */
-
 /** In this file the configuration for the program is done.
  * Also some compiler pragmas and defs are done here
  */
 
-#include <Controllino.h>
+
+// Select the Target Board for Emo Mode
+#define DEMO_MODE
+
+
+#ifndef DEMO_MODE
+	#include <Controllino.h>
+#endif
 
  #ifndef CONFIG_H
  #define CONFIG_H
@@ -57,16 +54,29 @@
  #define ENABLE_SERIAL_PRINT
 
  //Definition according to the IO mapping above
- #define IO_OneWire CONTROLLINO_IN0
+#ifndef DEMO_MODE
+	#define IO_OneWire CONTROLLINO_IN0
 
- #define O_MVBUFFER CONTROLLINO_D1
- #define O_PUMPBUFFER CONTROLLINO_D0
- #define O_INHIBITBURNER CONTROLLINO_D2
+	#define O_MVBUFFER CONTROLLINO_D1
+	#define O_PUMPBUFFER CONTROLLINO_D0
 
- #define I_PUMPWARMWATERACTIVE CONTROLLINO_A0
- #define I_PUMPHEATINGACTIVE CONTROLLINO_A1
- #define I_BURNERREQUEST CONTROLLINO_A2
+ 	#define O_INHIBITBURNER CONTROLLINO_D2
 
+ 	#define I_PUMPWARMWATERACTIVE CONTROLLINO_A0
+ 	#define I_PUMPHEATINGACTIVE CONTROLLINO_A1
+ 	#define I_BURNERREQUEST CONTROLLINO_A2
+#else
+	#define IO_OneWire 13
+
+	#define O_MVBUFFER 5 
+	#define O_PUMPBUFFER 4 
+
+ 	#define O_INHIBITBURNER 6 
+
+ 	#define I_PUMPWARMWATERACTIVE A0
+ 	#define I_PUMPHEATINGACTIVE A1 
+ 	#define I_BURNERREQUEST A2 
+#endif
 
 //Onewire Definitions
 #define TEMPERATURE_PRECISION 12

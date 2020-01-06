@@ -13,7 +13,7 @@ DallasTemperature tempSensors(&oneWire);
 LiquidCrystal_I2C lcd(0x27,17,2);  
 
 struct HeatState {
-	bool xMVBuffer;
+	bool xMvBuffer;       
 	bool xPumpBuffer;
 	bool xInhibitBurner;
 	bool xPumpHeatingActive;
@@ -41,18 +41,19 @@ void setup() {
 	init_tempsensors();
 	init_display();
 
+	Serial.begin(9600);
+
 }
 
 // Main Loop
 void loop() {
 
-	unsigned long last_update = millis();
-	unsigned long last_send = millis();
-
+	unsigned long last_update = millis()-1000;
+	unsigned long last_send = millis()-60000;
 
 	while(true){	
 
-		// Program Logic
+		// Program Logic run with one second delay
 		if ((millis() - last_update) > 1000) {
 			get_input();
 			update_state();
@@ -60,9 +61,9 @@ void loop() {
 			last_update = millis();
 		}
 
-		// Communication
+		// Communication sends data every minute
 		if ((millis() - last_send) > 60000) {
-			send_serial();
+			send_state();
 			last_send = millis();
 		}
 
@@ -102,9 +103,9 @@ void init_display() {
     lcd.backlight(); // turn backlight on
     // Welcom Message
     lcd.setCursor(0, 0);
-    lcd.print("Heat Control ");
+    lcd.print("Heat Control");
     lcd.setCursor(0,1);
-    lcd.print("0.0.1");
+    lcd.print("0.1.0");
 }
 
 
@@ -132,73 +133,9 @@ void init_tempsensors() {
 // Logic Functions
 ////////////////////////////////////////////////////////////////////////
 
-enum StateMachine
-{
-	BufferOff,
-	BufferActive,
-	PumpWater,
-};
+void update_state(){
 
-StateMachine state = BufferOff;
-unsigned long pump_start;
-unsigned long pump_end;
-
-void update_state() {
-	switch (state) {
-		case BufferOff:
-			if ((heat_state.f16TempBufferTop >= TEMP_MINIMUM) 
-					&& heat_state.xPumpHeatingActive 
-					&& !heat_state.xPumpWarmWaterActive) {
-				state = BufferActive;
-			}			
-			break;
-
-		case BufferActive:
-			if ((heat_state.xPumpWarmWaterActive)  // Warm Water Pump is active 
-				|| (!heat_state.xPumpHeatingActive and heat_state.xBurnerRequest)  // Only Burner && no Pump
-				|| (heat_state.f16TempBufferTop < (TEMP_MINIMUM-5.0))) { // Temperatur 5K below switch on temp
-				state = BufferOff;
-			}
-			if (heat_state.xBurnerRequest && ((millis()-pump_end) > PUMP_PAUSE)) { // Temperature to low
-				state = PumpWater;
-				pump_start = millis();
-			}
-			break;
-
-		case PumpWater:
-			if ((millis() - pump_start) > PUMP_DURATION) {
-				state = BufferActive;
-				pump_end = millis();
-			}
-			if ((heat_state.xPumpWarmWaterActive)  // Warm Water Pump is active 
-				|| (!heat_state.xPumpHeatingActive and heat_state.xBurnerRequest)  // Only Burner && no Pump
-				|| (heat_state.f16TempBufferTop < (TEMP_MINIMUM-5.0))) { // Temperatur 5K below switch on temp
-				state = BufferOff;
-			}
-			break;
-	}	
-
-	switch (state) {
-	    case BufferOff:
-	    	heat_state.xInhibitBurner = false;
-	    	heat_state.xMVBuffer = false;
-	    	heat_state.xPumpBuffer = false;
-	    	break;
-	    case BufferActive:	   	    
-	    	heat_state.xInhibitBurner = true;
-	    	heat_state.xMVBuffer = true;
-	    	heat_state.xPumpBuffer = false;		
-	    	break;
-	    case PumpWater:	    
-	    	heat_state.xInhibitBurner = true;
-	    	heat_state.xMVBuffer = true;
-	    	heat_state.xPumpBuffer = true;
-	    	break;
-	    default:
-	    	heat_state.xInhibitBurner = false;
-	    	heat_state.xMVBuffer = false;
-	    	heat_state.xPumpBuffer = false;  
-	}	
+	
 }
 
 
@@ -223,9 +160,48 @@ void get_input() {
 void set_output() {
 	digitalWrite(O_INHIBITBURNER, heat_state.xInhibitBurner);
 	digitalWrite(O_PUMPBUFFER, heat_state.xPumpBuffer);
-	digitalWrite(O_MVBUFFER, heat_state.xMVBuffer);
+	digitalWrite(O_MVBUFFER, heat_state.xMvBuffer);
 }
 
 ////////////////////////////////////////////////////////////////////////
 // Send state to serial
 ////////////////////////////////////////////////////////////////////////
+
+void send_state() {
+
+  Serial.println("===============================");	
+  Serial.print("magnet_valve:");
+  Serial.println(heat_state.xMvBuffer);
+  Serial.print("burner_inhibit:");
+  Serial.println(heat_state.xInhibitBurner);
+  Serial.print("buffer_pump:");
+  Serial.println(heat_state.xPumpBuffer);
+  Serial.print("warm_water_pump:");
+  Serial.println(heat_state.xPumpWarmWaterActive);
+  Serial.print("heat_pump:");
+  Serial.println(heat_state.xPumpHeatingActive);
+  Serial.print("burner_request:");
+  Serial.println(heat_state.xBurnerRequest);
+  if (heat_state.f16TempBufferTop > -7040.0) {
+    Serial.print("temp_buffer_top:");
+    Serial.println(heat_state.f16TempBufferTop);
+  }
+  if (heat_state.f16TempBufferTop > -7040.0) {
+    Serial.print("temp_buffer_buttom:");
+    Serial.println(heat_state.f16TempBufferButtom);
+  }
+  if (heat_state.f16TempBufferTop > -7040.0) {
+    Serial.print("temp_warm_water:");
+    Serial.println(heat_state.f16TempWarmWater);
+  }
+  if (heat_state.f16TempBufferTop > -7040.0) {
+    Serial.print("temp_heat_flow:");
+    Serial.println(heat_state.f16TempFlow);
+  }
+  if (heat_state.f16TempBufferTop > -7040.0) {
+    Serial.print("temp_heat_return:");
+    Serial.println(heat_state.f16TempReturn);
+  }
+}
+
+
