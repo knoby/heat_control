@@ -169,7 +169,6 @@ void set_output() {
 
 void send_state() {
 
-  Serial.println("===============================");	
   Serial.print("magnet_valve:");
   Serial.println(heat_state.xMvBuffer);
   Serial.print("burner_inhibit:");
@@ -202,6 +201,8 @@ void send_state() {
     Serial.print("temp_heat_return:");
     Serial.println(heat_state.f16TempReturn);
   }
+  Serial.println("END");
+
 }
 
 
