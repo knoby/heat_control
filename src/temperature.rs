@@ -23,7 +23,7 @@ pub struct PlantTemperatures {
 }
 
 pub struct Sensors {
-    bus: onewire::OneWire,
+    bus: onewire::OneWire<hal::port::Pin<hal::port::mode::TriState>>,
     warm_water: Option<onewire::DS18B20>,
     buffer_top: Option<onewire::DS18B20>,
     buffer_buttom: Option<onewire::DS18B20>,
@@ -35,7 +35,7 @@ impl Sensors {
     /// Setup function
     pub fn setup(pin: hal::port::Pin<hal::port::mode::TriState>) -> Self {
         // Init the bus
-        let mut bus = onewire::OneWire::new();
+        let mut bus = onewire::OneWire::new(pin);
         let mut delay = hal::delay::Delay::<crate::Clock>::new();
 
         // Init sensors and set their configuration
@@ -67,7 +67,7 @@ impl Sensors {
 fn init_sensor(
     add: &[u8; 8],
     _delay: &mut hal::delay::Delay<crate::Clock>,
-    _bus: &mut onewire::OneWire,
+    _bus: &mut onewire::OneWire<hal::port::Pin<hal::port::mode::TriState>>,
 ) -> Option<onewire::DS18B20> {
     Some(onewire::DS18B20::new())
 }

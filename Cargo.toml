@@ -8,6 +8,7 @@ version = "0.1.0"
 
 [dependencies]
 avr-std-stub = "1.0.2"
+embedded-hal = "0.2.3"
 
 [dependencies.void]
 default_features = false

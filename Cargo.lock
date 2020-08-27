@@ -91,6 +91,7 @@ version = "0.1.0"
 dependencies = [
  "atmega328p-hal",
  "avr-std-stub",
+ "embedded-hal",
  "hd44780-driver",
  "void",
 ]
