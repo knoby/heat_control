@@ -1,0 +1,33 @@
+[package]
+authors = ["knoby <maximilian.brinkmann@posteo.de>"]
+edition = "2018"
+name = "heat_control"
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+avr-std-stub = "1.0.2"
+
+[dependencies.void]
+default_features = false
+version = "*"
+
+[dependencies.hd44780-driver]
+git = "https://github.com/JohnDoneth/hd44780-driver"
+
+[dependencies.atmega328p-hal]
+features = ["rt"]
+git = "https://github.com/Rahix/avr-hal"
+
+[profile.dev]
+lto = true
+opt-level = "s"
+panic = "abort"
+
+[profile.release]
+codegen-units = 1
+debug = true
+lto = true
+opt-level = "s"
+panic = "abort"
