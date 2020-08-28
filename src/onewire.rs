@@ -1,12 +1,41 @@
-use atmega328p_hal::prelude::*;
 use core::cmp::Ordering;
+use embedded_crc_macros::crc8;
 use embedded_hal as hal;
-use embedded_hal::digital::v2::*;
 use hal::blocking::delay::DelayUs;
-use num_format::{Buffer, Locale};
+use hal::digital::v2::*;
+
+crc8!(
+    onewire_crc,
+    0b00110001, /*x^8+x^5+x^4+1*/
+    0,
+    "One Wire CRC8 Calculation"
+);
 
 pub enum Command {
     Search,
+}
+
+pub struct SearchState {
+    last_discrepancy: u8,
+    rom_no: [u8; 8],
+    status: SearchStatus,
+}
+
+impl SearchState {
+    pub fn new() -> Self {
+        Self {
+            last_discrepancy: 0,
+            rom_no: [0; 8],
+            status: SearchStatus::Next,
+        }
+    }
+}
+
+#[repr(u8)]
+#[derive(PartialEq)]
+enum SearchStatus {
+    Next,
+    End,
 }
 
 impl From<Command> for u8 {
@@ -41,7 +70,7 @@ impl<E: Sized, IO: InputPin<Error = E> + OutputPin<Error = E>> OneWire<IO> {
         delay.delay_us(480);
 
         // Release the line
-        self.io_pin.set_high();
+        self.io_pin.set_high()?;
 
         // Check for the line for a divice present pulse
 
@@ -77,7 +106,7 @@ impl<E: Sized, IO: InputPin<Error = E> + OutputPin<Error = E>> OneWire<IO> {
         // Wati at least 1 us
         delay.delay_us(2);
         // Try to set the line to high
-        self.io_pin.set_high();
+        self.io_pin.set_high()?;
         //Wait until the end of the read window
         delay.delay_us(5);
         let bit = self.io_pin.is_high();
@@ -133,85 +162,75 @@ impl<E: Sized, IO: InputPin<Error = E> + OutputPin<Error = E>> OneWire<IO> {
     // Search for devices
     pub fn search(
         &mut self,
+        search_state: &mut SearchState,
         delay: &mut dyn DelayUs<u16>,
-        serial: &mut atmega328p_hal::usart::WriteUsart0<crate::Clock>,
-    ) -> Result<Option<bool>, Error<E>> {
-        serial.write_str("Start One Wire search ...\n");
-
-        // Search State
-        let mut last_discrepancy = 0;
-        let mut rom_no = [0_u8; 8];
-
-        loop {
-            // Reset and check is device is present
-            serial.write_str("Reseting the bus\n");
-            if !self.reset(delay)? {
-                serial.write_str("No device on bus\n");
-                return Ok(None);
-            };
-
-            let mut last_zero: u8 = 0;
-
-            // Send Search command
-            serial.write_str("Sending Search Command\n");
-            self.write_byte(Command::Search.into(), delay)?;
-
-            for id_bit_number in 1_u8..=64 {
-                // Read two bits
-                let id_bit = self.read_bit(delay)?;
-                let comp_id_bit = self.read_bit(delay)?;
-
-                // Eval the two recived bits
-                let serach_direction = if id_bit && comp_id_bit {
-                    // No Device found
-                    return Ok(None);
-                } else if id_bit != comp_id_bit {
-                    // no discrepancy found
-                    id_bit
-                } else {
-                    // a discrepancy found
-                    let direction = match id_bit_number.cmp(&last_discrepancy) {
-                        Ordering::Equal => {
-                            // We were at this position bevore. Now we choose the one path
-                            true
-                        }
-                        Ordering::Greater => {
-                            // a new discrepancy is found --> Choose the 0 path
-                            false
-                        }
-                        Ordering::Less => {
-                            // A discrepancy from a previous iteration is found just use the one from the rom code
-                            is_bit_set(&rom_no, id_bit_number)
-                        }
-                    };
-                    if !direction {
-                        last_zero = id_bit_number;
-                    }
-                    direction
-                };
-                self.write_bit(serach_direction, delay)?;
-
-                // set id in rom_no
-                set_bit(&mut rom_no, id_bit_number, serach_direction);
-            }
-
-            last_discrepancy = last_zero;
-
-            serial.write_str("Rom number found: [");
-            let mut buffer = Buffer::default();
-            for byte in rom_no.iter() {
-                buffer.write_formatted(byte, &Locale::de);
-                serial.write_str(buffer.as_str());
-                serial.write_str(", ");
-            }
-            serial.write_str("]\n");
-            if last_discrepancy == 0 {
-                serial.write_str("Done!");
-                break;
-            }
+    ) -> Result<Option<[u8; 8]>, Error<E>> {
+        if search_state.status == SearchStatus::End {
+            return Err(Error::SearchEnd);
         }
 
-        Ok(None)
+        // Reset and check is device is present
+        if !self.reset(delay)? {
+            search_state.status = SearchStatus::End;
+            return Ok(None);
+        };
+
+        let mut last_zero: u8 = 0;
+
+        // Send Search command
+        self.write_byte(Command::Search.into(), delay)?;
+
+        for id_bit_number in 1_u8..=64 {
+            // Read two bits
+            let id_bit = self.read_bit(delay)?;
+            let comp_id_bit = self.read_bit(delay)?;
+
+            // Eval the two recived bits
+            let serach_direction = if id_bit && comp_id_bit {
+                // No Device found
+                search_state.status = SearchStatus::End;
+                return Ok(None);
+            } else if id_bit != comp_id_bit {
+                // no discrepancy found
+                id_bit
+            } else {
+                // a discrepancy found
+                let direction = match id_bit_number.cmp(&search_state.last_discrepancy) {
+                    Ordering::Equal => {
+                        // We were at this position bevore. Now we choose the one path
+                        true
+                    }
+                    Ordering::Greater => {
+                        // a new discrepancy is found --> Choose the 0 path
+                        false
+                    }
+                    Ordering::Less => {
+                        // A discrepancy from a previous iteration is found just use the one from the rom code
+                        is_bit_set(&search_state.rom_no, id_bit_number)
+                    }
+                };
+                if !direction {
+                    last_zero = id_bit_number;
+                }
+                direction
+            };
+            self.write_bit(serach_direction, delay)?;
+
+            // set id in rom_no
+            set_bit(&mut search_state.rom_no, id_bit_number, serach_direction);
+        }
+
+        search_state.last_discrepancy = last_zero;
+
+        // Check if it was the last device
+        if search_state.last_discrepancy == 0 {
+            search_state.status = SearchStatus::End;
+        }
+
+        // Check the crc
+        Self::check_rom_crc(&search_state.rom_no)?;
+
+        Ok(Some(search_state.rom_no))
     }
 
     fn is_line_high(&self, delay: &mut dyn DelayUs<u16>) -> Result<(), Error<E>> {
@@ -223,6 +242,14 @@ impl<E: Sized, IO: InputPin<Error = E> + OutputPin<Error = E>> OneWire<IO> {
             }
         }
         Err(Error::WireNotHigh)
+    }
+
+    fn check_rom_crc(add: &[u8; 8]) -> Result<(), Error<E>> {
+        if onewire_crc(add) == 0 {
+            Ok(())
+        } else {
+            Err(Error::CrcError)
+        }
     }
 }
 
@@ -256,11 +283,16 @@ impl DS18B20 {
     }
 }
 
+#[repr(u8)]
 pub enum Error<E: Sized> {
     /// Wire does is not pulled up by resistor. Maybe it is shortend
     WireNotHigh,
     /// An Error on the IO Port occured
     PortError(E),
+    /// Search is at the end
+    SearchEnd,
+    /// CRC Value not ok
+    CrcError,
 }
 
 impl<E: Sized> From<E> for Error<E> {

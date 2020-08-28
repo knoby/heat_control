@@ -8,8 +8,9 @@ version = "0.1.0"
 
 [dependencies]
 avr-std-stub = "1.0.2"
+embedded-crc-macros = "0.1.0"
 embedded-hal = "0.2.3"
-num-format = {version = "0.4", default-features = false}
+num-format = {version = "0.4.0", default-features = false}
 
 [dependencies.void]
 default_features = false

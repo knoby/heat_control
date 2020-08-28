@@ -56,8 +56,22 @@ impl Sensors {
     }
 
     pub fn print_sensors(&mut self, serial: &mut hal::usart::WriteUsart0<crate::Clock>) {
-        self.bus
-            .search(&mut hal::delay::Delay::<crate::Clock>::new(), serial);
+        // Create the search state
+        let mut search_state = onewire::SearchState::new();
+
+        while let Ok(Some(rom_no)) = self.bus.search(
+            &mut search_state,
+            &mut hal::delay::Delay::<crate::Clock>::new(),
+        ) {
+            serial.write_str("Found Device: ").ok();
+            let mut buffer = num_format::Buffer::default();
+            for byte in rom_no.iter() {
+                buffer.write_formatted(byte, &num_format::Locale::de);
+                serial.write_str(buffer.as_str()).ok();
+                serial.write_char(' ').ok();
+            }
+            serial.write_char('\n').ok();
+        }
     }
 
     // Start Temperature Measurement on all sensors. User has to take care that the conversion time is waited before read

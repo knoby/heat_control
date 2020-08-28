@@ -77,6 +77,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4785bdd1c96b2a846b2bd7cc02e86b6b3dbf14e7e53446c4f54c92a361040822"
 
 [[package]]
+name = "embedded-crc-macros"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bd8659882a4d3c3f5c11eb0e54c59d636ee95a5e6c18d6bdca17c536bfc1b681"
+
+[[package]]
 name = "embedded-hal"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -100,6 +106,7 @@ version = "0.1.0"
 dependencies = [
  "atmega328p-hal",
  "avr-std-stub",
+ "embedded-crc-macros",
  "embedded-hal",
  "hd44780-driver",
  "num-format",
