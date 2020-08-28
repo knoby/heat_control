@@ -55,6 +55,11 @@ impl Sensors {
         }
     }
 
+    pub fn print_sensors(&mut self, serial: &mut hal::usart::WriteUsart0<crate::Clock>) {
+        self.bus
+            .search(&mut hal::delay::Delay::<crate::Clock>::new(), serial);
+    }
+
     // Start Temperature Measurement on all sensors. User has to take care that the conversion time is waited before read
 
     // Read Temperature for all sensors

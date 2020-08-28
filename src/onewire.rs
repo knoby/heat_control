@@ -1,6 +1,22 @@
+use atmega328p_hal::prelude::*;
+use core::cmp::Ordering;
 use embedded_hal as hal;
 use embedded_hal::digital::v2::*;
 use hal::blocking::delay::DelayUs;
+use num_format::{Buffer, Locale};
+
+pub enum Command {
+    Search,
+}
+
+impl From<Command> for u8 {
+    fn from(cmd: Command) -> Self {
+        use Command::*;
+        match cmd {
+            Search => 0xF0,
+        }
+    }
+}
 
 pub struct OneWire<IO: InputPin + OutputPin> {
     io_pin: IO,
@@ -39,7 +55,7 @@ impl<E: Sized, IO: InputPin<Error = E> + OutputPin<Error = E>> OneWire<IO> {
             delay.delay_us(10);
         }
 
-        Ok(true)
+        Ok(line)
     }
 
     // Writes a bit to the line
@@ -69,6 +85,135 @@ impl<E: Sized, IO: InputPin<Error = E> + OutputPin<Error = E>> OneWire<IO> {
         Ok(bit?)
     }
 
+    // Write a byte to the line
+    fn write_byte(&mut self, mut byte: u8, delay: &mut dyn DelayUs<u16>) -> Result<(), Error<E>> {
+        for _ in 0..8 {
+            self.write_bit((byte & 0x01) == 0x01, delay)?;
+            byte >>= 1;
+        }
+        Ok(())
+    }
+
+    // Read a byte from the line
+    fn read_byte(&mut self, delay: &mut dyn DelayUs<u16>) -> Result<u8, Error<E>> {
+        let mut byte = 0_u8;
+        for _ in 0..8 {
+            byte >>= 1;
+            if self.reset(delay)? {
+                byte |= 0x80;
+            }
+        }
+        Ok(byte)
+    }
+
+    // Send bytes to the line
+    pub fn write_bytes(
+        &mut self,
+        bytes: &[u8],
+        delay: &mut dyn DelayUs<u16>,
+    ) -> Result<(), Error<E>> {
+        for byte in bytes {
+            self.write_byte(*byte, delay)?;
+        }
+        Ok(())
+    }
+
+    // Recive bytes
+    pub fn read_bytes(
+        &mut self,
+        bytes: &mut [u8],
+        delay: &mut dyn DelayUs<u16>,
+    ) -> Result<(), Error<E>> {
+        for byte in bytes {
+            *byte = self.read_byte(delay)?;
+        }
+        Ok(())
+    }
+
+    // Search for devices
+    pub fn search(
+        &mut self,
+        delay: &mut dyn DelayUs<u16>,
+        serial: &mut atmega328p_hal::usart::WriteUsart0<crate::Clock>,
+    ) -> Result<Option<bool>, Error<E>> {
+        serial.write_str("Start One Wire search ...\n");
+
+        // Search State
+        let mut last_discrepancy = 0;
+        let mut rom_no = [0_u8; 8];
+
+        loop {
+            // Reset and check is device is present
+            serial.write_str("Reseting the bus\n");
+            if !self.reset(delay)? {
+                serial.write_str("No device on bus\n");
+                return Ok(None);
+            };
+
+            let mut last_zero: u8 = 0;
+
+            // Send Search command
+            serial.write_str("Sending Search Command\n");
+            self.write_byte(Command::Search.into(), delay)?;
+
+            for id_bit_number in 1_u8..=64 {
+                // Read two bits
+                let id_bit = self.read_bit(delay)?;
+                let comp_id_bit = self.read_bit(delay)?;
+
+                // Eval the two recived bits
+                let serach_direction = if id_bit && comp_id_bit {
+                    // No Device found
+                    return Ok(None);
+                } else if id_bit != comp_id_bit {
+                    // no discrepancy found
+                    id_bit
+                } else {
+                    // a discrepancy found
+                    let direction = match id_bit_number.cmp(&last_discrepancy) {
+                        Ordering::Equal => {
+                            // We were at this position bevore. Now we choose the one path
+                            true
+                        }
+                        Ordering::Greater => {
+                            // a new discrepancy is found --> Choose the 0 path
+                            false
+                        }
+                        Ordering::Less => {
+                            // A discrepancy from a previous iteration is found just use the one from the rom code
+                            is_bit_set(&rom_no, id_bit_number)
+                        }
+                    };
+                    if !direction {
+                        last_zero = id_bit_number;
+                    }
+                    direction
+                };
+                self.write_bit(serach_direction, delay)?;
+
+                // set id in rom_no
+                set_bit(&mut rom_no, id_bit_number, serach_direction);
+            }
+
+            last_discrepancy = last_zero;
+
+            serial.write_str("Rom number found: [");
+            let mut buffer = Buffer::default();
+            for byte in rom_no.iter() {
+                buffer.write_formatted(byte, &Locale::de);
+                serial.write_str(buffer.as_str());
+                serial.write_str(", ");
+            }
+            serial.write_str("]\n");
+            if last_discrepancy == 0 {
+                serial.write_str("Done!");
+                break;
+            }
+        }
+
+        Ok(None)
+    }
+
     fn is_line_high(&self, delay: &mut dyn DelayUs<u16>) -> Result<(), Error<E>> {
         for _ in 0..125 {
             if self.io_pin.is_high()? {
@@ -78,6 +223,28 @@ impl<E: Sized, IO: InputPin<Error = E> + OutputPin<Error = E>> OneWire<IO> {
             }
         }
         Err(Error::WireNotHigh)
+    }
+}
+
+fn is_bit_set(array: &[u8], bit: u8) -> bool {
+    if bit / 8 >= array.len() as u8 {
+        return false;
+    }
+    let index = bit / 8;
+    let offset = bit % 8;
+    array[index as usize] & (0x01 << offset) != 0x00
+}
+
+fn set_bit(array: &mut [u8], bit: u8, value: bool) {
+    if bit / 8 >= array.len() as u8 {
+        return;
+    }
+    let index = bit / 8;
+    let offset = bit % 8;
+    if value {
+        array[index as usize] |= 0x01 << offset
+    } else {
+        array[index as usize] &= !(0x01 << offset)
     }
 }
 

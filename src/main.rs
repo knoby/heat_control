@@ -81,7 +81,8 @@ fn setup() -> (
     )
     .split();
 
-    serial.write_str("Heat Control/n").ok();
+    serial.write_str("Heat Control\n").ok();
+    serial.write_str("Start Initialization ...\n").ok();
 
     // ------------------
     // I2C Display
@@ -145,7 +146,7 @@ fn main() -> ! {
     // Init the hardware
     let (inputs, outputs, mut serial, display, mut sensors) = setup();
 
-    loop {
-        sensors.read_temperatures();
-    }
+    sensors.print_sensors(&mut serial);
+
+    loop {}
 }
