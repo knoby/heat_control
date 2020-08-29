@@ -133,6 +133,11 @@ impl DS18B20 {
 
         let temperature_raw = i16::from_le_bytes([scratchpad[0], scratchpad[1]]);
 
+        if temperature_raw as u16 == 0xff_ff_u16 {
+            // No response from device
+            return Err(super::Error::DataError);
+        }
+
         let temperature = temperature_raw / devider;
 
         Ok(temperature)

@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
+use atmega328p_hal::prelude::*;
 use core::cmp::Ordering;
-use embedded_crc_macros::crc8;
 use embedded_hal as hal;
 use hal::blocking::delay::DelayUs;
 use hal::digital::v2::*;
@@ -9,13 +9,6 @@ use hal::digital::v2::*;
 pub mod ds18b20;
 
 pub use ds18b20::DS18B20;
-
-crc8!(
-    onewire_crc,
-    0b00110001, /*x^8+x^5+x^4+1*/
-    0,
-    "One Wire CRC8 Calculation"
-);
 
 #[repr(u8)]
 enum Command {
@@ -143,7 +136,7 @@ impl<E: Sized, IO: InputPin<Error = E> + OutputPin<Error = E>> OneWire<IO> {
         let mut byte = 0_u8;
         for _ in 0..8 {
             byte >>= 1;
-            if self.reset(delay)? {
+            if self.read_bit(delay)? {
                 byte |= 0x80;
             }
         }
@@ -204,7 +197,8 @@ impl<E: Sized, IO: InputPin<Error = E> + OutputPin<Error = E>> OneWire<IO> {
             let serach_direction = if id_bit && comp_id_bit {
                 // No Device found
                 search_state.status = SearchStatus::End;
-                return Ok(None);
+                search_state.rom_no[0] = id_bit as u8;
+                return Ok(Some(search_state.rom_no));
             } else if id_bit != comp_id_bit {
                 // no discrepancy found
                 id_bit
@@ -221,7 +215,7 @@ impl<E: Sized, IO: InputPin<Error = E> + OutputPin<Error = E>> OneWire<IO> {
                     }
                     Ordering::Less => {
                         // A discrepancy from a previous iteration is found just use the one from the rom code
-                        is_bit_set(&search_state.rom_no, id_bit_number)
+                        is_bit_set(&search_state.rom_no, id_bit_number - 1)
                     }
                 };
                 if !direction {
@@ -232,7 +226,11 @@ impl<E: Sized, IO: InputPin<Error = E> + OutputPin<Error = E>> OneWire<IO> {
             self.write_bit(serach_direction, delay)?;
 
             // set id in rom_no
-            set_bit(&mut search_state.rom_no, id_bit_number, serach_direction);
+            set_bit(
+                &mut search_state.rom_no,
+                id_bit_number - 1,
+                serach_direction,
+            );
         }
 
         search_state.last_discrepancy = last_zero;
@@ -260,10 +258,14 @@ impl<E: Sized, IO: InputPin<Error = E> + OutputPin<Error = E>> OneWire<IO> {
     }
 
     fn check_rom_crc(add: &[u8; 8]) -> Result<(), Error<E>> {
-        if onewire_crc(add) == 0 {
+        let crc_rec = add[7];
+        let mut crc = crc_any::CRCu8::crc8maxim();
+        crc.digest(&add[0..=6]);
+        let crc_calc = crc.get_crc();
+        if crc_calc == crc_rec {
             Ok(())
         } else {
-            Err(Error::CrcError)
+            Err(Error::CrcError(crc_calc, crc_rec))
         }
     }
 }
@@ -301,6 +303,7 @@ impl Device {
 }
 
 #[repr(u8)]
+#[derive(PartialEq)]
 pub enum Error<E: Sized> {
     /// Wire does is not pulled up by resistor. Maybe it is shortend
     WireNotHigh,
@@ -309,7 +312,7 @@ pub enum Error<E: Sized> {
     /// Search is at the end
     SearchEnd,
     /// CRC Value not ok
-    CrcError,
+    CrcError(u8, u8),
     /// Some data does not make sense
     DataError,
 }

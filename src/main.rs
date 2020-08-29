@@ -87,6 +87,7 @@ fn setup() -> (
     // ------------------
     // I2C Display
     // ------------------
+    serial.write_str("Initializing I2C LCD\n").ok();
     let sda = portc.pc4.into_pull_up_input(&portc.ddr);
     let scl = portc.pc5.into_pull_up_input(&portc.ddr);
 
@@ -112,7 +113,9 @@ fn setup() -> (
     // ------------------
     // Init the Sensors
     // ------------------
-
+    serial
+        .write_str("Initialize OneWire DS18b20 Sensors\n")
+        .ok();
     // Split the pin for one wire
     let pd2 = portd.pd2.into_tri_state(&portd.ddr);
 
@@ -122,7 +125,7 @@ fn setup() -> (
     // ------------------
     // digital IOs
     // ------------------
-
+    serial.write_str("Initializing Digital IOs\n").ok();
     let inputs = io::Inputs {
         heating_pump: portc.pc1.into_floating_input(&portc.ddr).downgrade(),
         start_burner: portc.pc3.into_floating_input(&portc.ddr).downgrade(),
@@ -135,6 +138,7 @@ fn setup() -> (
         pump_buffer: portd.pd4.into_output(&portd.ddr).downgrade(),
     };
 
+    serial.write_str("Initialization Done!\n").ok();
     (inputs, outputs, serial, display, temperature_sensors)
 }
 
@@ -148,7 +152,29 @@ fn main() -> ! {
 
     sensors.print_sensors(&mut serial);
 
+    let mut delay = hal::delay::Delay::<Clock>::new();
+
     loop {
-        sensors.read_temperatures();
+        serial.write_str("Reading Temperature ... ").ok();
+        if let Some(plant_temp) = sensors.read_temperatures() {
+            serial.write_str("Done\n").ok();
+            if let Some(temp) = plant_temp.heat_flow {
+                serial.write_str("Temp Heat Flow: ").ok();
+                let mut buffer = num_format::Buffer::default();
+                buffer.write_formatted(&(temp as u8), &num_format::Locale::de);
+                serial.write_str(buffer.as_str()).ok();
+                serial.write_str("°C\n").ok();
+            }
+            if let Some(temp) = plant_temp.heat_return {
+                serial.write_str("Temp Heat Return: ").ok();
+                let mut buffer = num_format::Buffer::default();
+                buffer.write_formatted(&(temp as u8), &num_format::Locale::de);
+                serial.write_str(buffer.as_str()).ok();
+                serial.write_str("°C\n").ok();
+            }
+        } else {
+            serial.write_str("Error\n").ok();
+        }
+        delay.delay_ms(1000_u16);
     }
 }

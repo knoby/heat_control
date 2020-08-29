@@ -3,10 +3,10 @@ use crate::onewire;
 use hal::prelude::*;
 
 const BUFFER_TOP_SENSOR_ADD: [u8; 8] = [0x28, 0xFF, 0x4B, 0x96, 0x74, 0x16, 0x04, 0x6F];
-const BUFFER_BUTTOM_SENSOR_ADD: [u8; 8] = [28, 0xFF, 0x2F, 0x96, 0x74, 0x16, 0x04, 0x61];
-const WARM_WATER_SENSOR_ADD: [u8; 8] = [28, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-const HEAT_FLOW_SENSOR_ADD: [u8; 8] = [28, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-const HEAT_RETURN_SENSOR_ADD: [u8; 8] = [28, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+const BUFFER_BUTTOM_SENSOR_ADD: [u8; 8] = [0x28, 0xFF, 0x2F, 0x96, 0x74, 0x16, 0x04, 0x61];
+const WARM_WATER_SENSOR_ADD: [u8; 8] = [0x28, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+const HEAT_FLOW_SENSOR_ADD: [u8; 8] = [40, 255, 65, 130, 88, 22, 4, 203];
+const HEAT_RETURN_SENSOR_ADD: [u8; 8] = [40, 255, 123, 88, 85, 22, 3, 123];
 
 const _ALARM_TEMP_LOW: i8 = 5;
 const _ALARM_TEMP_HIGH: i8 = 95;
@@ -60,18 +60,38 @@ impl Sensors {
         // Create the search state
         let mut search_state = onewire::SearchState::new();
 
-        while let Ok(Some(rom_no)) = self.bus.search(
-            &mut search_state,
-            &mut hal::delay::Delay::<crate::Clock>::new(),
-        ) {
-            serial.write_str("Found Device: ").ok();
-            let mut buffer = num_format::Buffer::default();
-            for byte in rom_no.iter() {
-                buffer.write_formatted(byte, &num_format::Locale::de);
-                serial.write_str(buffer.as_str()).ok();
-                serial.write_char(' ').ok();
+        serial
+            .write_str("Searchsing OneWire Bus for devices\n")
+            .ok();
+
+        loop {
+            match self.bus.search(
+                &mut search_state,
+                &mut hal::delay::Delay::<crate::Clock>::new(),
+            ) {
+                Ok(Some(rom_no)) => {
+                    serial.write_str("Found Device: ").ok();
+                    let mut buffer = num_format::Buffer::default();
+                    for byte in rom_no.iter() {
+                        buffer.write_formatted(byte, &num_format::Locale::de);
+                        serial.write_str(buffer.as_str()).ok();
+                        serial.write_char(' ').ok();
+                    }
+                    serial.write_char('\n').ok();
+                }
+                Ok(None) => {
+                    serial.write_str("Nothing found").ok();
+                    break;
+                }
+                Err(e) => {
+                    if e == onewire::Error::SearchEnd {
+                        serial.write_str("No more devices found\n").ok();
+                    } else {
+                        serial.write_str("An Error Occured").ok();
+                    };
+                    break;
+                }
             }
-            serial.write_char('\n').ok();
         }
     }
 
