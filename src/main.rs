@@ -148,5 +148,7 @@ fn main() -> ! {
 
     sensors.print_sensors(&mut serial);
 
-    loop {}
+    loop {
+        sensors.read_temperatures();
+    }
 }

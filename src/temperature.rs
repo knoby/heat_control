@@ -10,16 +10,17 @@ const HEAT_RETURN_SENSOR_ADD: [u8; 8] = [28, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 
 const _ALARM_TEMP_LOW: i8 = 5;
 const _ALARM_TEMP_HIGH: i8 = 95;
-//const _PERCISION: onewire::ds18b20::MeasureResolution = onewire::ds18b20::MeasureResolution::TC4;
+const MEASURERESOLUTION: onewire::ds18b20::MeasureResolution =
+    onewire::ds18b20::MeasureResolution::Bit09;
 
 /// Temperatures in the plant
 #[derive(Default)]
 pub struct PlantTemperatures {
-    pub warm_water: Option<u8>,
-    pub buffer_top: Option<u8>,
-    pub buffer_buttom: Option<u8>,
-    pub heat_flow: Option<u8>,
-    pub heat_return: Option<u8>,
+    pub warm_water: Option<i16>,
+    pub buffer_top: Option<i16>,
+    pub buffer_buttom: Option<i16>,
+    pub heat_flow: Option<i16>,
+    pub heat_return: Option<i16>,
 }
 
 pub struct Sensors {
@@ -39,11 +40,11 @@ impl Sensors {
         let mut delay = hal::delay::Delay::<crate::Clock>::new();
 
         // Init sensors and set their configuration
-        let warm_water = init_sensor(&WARM_WATER_SENSOR_ADD, &mut delay, &mut bus);
-        let buffer_top = init_sensor(&BUFFER_TOP_SENSOR_ADD, &mut delay, &mut bus);
-        let buffer_buttom = init_sensor(&BUFFER_BUTTOM_SENSOR_ADD, &mut delay, &mut bus);
-        let heat_flow = init_sensor(&HEAT_FLOW_SENSOR_ADD, &mut delay, &mut bus);
-        let heat_return = init_sensor(&HEAT_RETURN_SENSOR_ADD, &mut delay, &mut bus);
+        let warm_water = init_sensor(WARM_WATER_SENSOR_ADD, &mut delay, &mut bus);
+        let buffer_top = init_sensor(BUFFER_TOP_SENSOR_ADD, &mut delay, &mut bus);
+        let buffer_buttom = init_sensor(BUFFER_BUTTOM_SENSOR_ADD, &mut delay, &mut bus);
+        let heat_flow = init_sensor(HEAT_FLOW_SENSOR_ADD, &mut delay, &mut bus);
+        let heat_return = init_sensor(HEAT_RETURN_SENSOR_ADD, &mut delay, &mut bus);
 
         Sensors {
             bus,
@@ -78,15 +79,41 @@ impl Sensors {
 
     // Read Temperature for all sensors
     pub fn read_temperatures(&mut self) -> Option<PlantTemperatures> {
-        Some(PlantTemperatures::default())
+        let mut temperatures = PlantTemperatures::default();
+
+        let mut delay = hal::delay::Delay::<super::Clock>::new();
+
+        if onewire::DS18B20::start_measurement(&mut self.bus, &mut delay).is_err() {
+            return None;
+        };
+
+        delay.delay_ms(MEASURERESOLUTION.conversion_time());
+
+        if let Some(sensor) = self.warm_water.as_mut() {
+            temperatures.warm_water = sensor.read_temperature(&mut self.bus, &mut delay).ok();
+        }
+        if let Some(sensor) = self.buffer_buttom.as_mut() {
+            temperatures.buffer_buttom = sensor.read_temperature(&mut self.bus, &mut delay).ok();
+        }
+        if let Some(sensor) = self.buffer_top.as_mut() {
+            temperatures.buffer_top = sensor.read_temperature(&mut self.bus, &mut delay).ok();
+        }
+        if let Some(sensor) = self.heat_flow.as_mut() {
+            temperatures.heat_flow = sensor.read_temperature(&mut self.bus, &mut delay).ok();
+        }
+        if let Some(sensor) = self.heat_return.as_mut() {
+            temperatures.heat_return = sensor.read_temperature(&mut self.bus, &mut delay).ok();
+        }
+
+        Some(temperatures)
     }
 }
 
 // Create a sensor and set the options
 fn init_sensor(
-    add: &[u8; 8],
+    add: [u8; 8],
     _delay: &mut hal::delay::Delay<crate::Clock>,
     _bus: &mut onewire::OneWire<hal::port::Pin<hal::port::mode::TriState>>,
 ) -> Option<onewire::DS18B20> {
-    Some(onewire::DS18B20::new())
+    onewire::DS18B20::new(add).ok()
 }

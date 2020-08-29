@@ -1,8 +1,14 @@
+#![allow(dead_code)]
+
 use core::cmp::Ordering;
 use embedded_crc_macros::crc8;
 use embedded_hal as hal;
 use hal::blocking::delay::DelayUs;
 use hal::digital::v2::*;
+
+pub mod ds18b20;
+
+pub use ds18b20::DS18B20;
 
 crc8!(
     onewire_crc,
@@ -11,8 +17,11 @@ crc8!(
     "One Wire CRC8 Calculation"
 );
 
-pub enum Command {
-    Search,
+#[repr(u8)]
+enum Command {
+    Search = 0xF0,
+    SelectRom = 0x55,
+    SkipRom = 0xCC,
 }
 
 pub struct SearchState {
@@ -36,15 +45,6 @@ impl SearchState {
 enum SearchStatus {
     Next,
     End,
-}
-
-impl From<Command> for u8 {
-    fn from(cmd: Command) -> Self {
-        use Command::*;
-        match cmd {
-            Search => 0xF0,
-        }
-    }
 }
 
 pub struct OneWire<IO: InputPin + OutputPin> {
@@ -123,6 +123,21 @@ impl<E: Sized, IO: InputPin<Error = E> + OutputPin<Error = E>> OneWire<IO> {
         Ok(())
     }
 
+    // Reset and select a rom
+    fn reset_and_select_rom(
+        &mut self,
+        rom_no: &[u8; 8],
+        delay: &mut dyn DelayUs<u16>,
+    ) -> Result<(), Error<E>> {
+        self.reset(delay)?;
+
+        self.write_byte(Command::SelectRom as u8, delay)?;
+
+        self.write_bytes(rom_no, delay)?;
+
+        Ok(())
+    }
+
     // Read a byte from the line
     fn read_byte(&mut self, delay: &mut dyn DelayUs<u16>) -> Result<u8, Error<E>> {
         let mut byte = 0_u8;
@@ -178,7 +193,7 @@ impl<E: Sized, IO: InputPin<Error = E> + OutputPin<Error = E>> OneWire<IO> {
         let mut last_zero: u8 = 0;
 
         // Send Search command
-        self.write_byte(Command::Search.into(), delay)?;
+        self.write_byte(Command::Search as u8, delay)?;
 
         for id_bit_number in 1_u8..=64 {
             // Read two bits
@@ -275,11 +290,13 @@ fn set_bit(array: &mut [u8], bit: u8, value: bool) {
     }
 }
 
-pub struct DS18B20 {}
+pub struct Device {
+    rom_no: [u8; 8],
+}
 
-impl DS18B20 {
-    pub fn new() -> Self {
-        Self {}
+impl Device {
+    pub fn new(rom_no: [u8; 8]) -> Self {
+        Self { rom_no }
     }
 }
 
@@ -293,6 +310,8 @@ pub enum Error<E: Sized> {
     SearchEnd,
     /// CRC Value not ok
     CrcError,
+    /// Some data does not make sense
+    DataError,
 }
 
 impl<E: Sized> From<E> for Error<E> {
