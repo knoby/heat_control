@@ -1,6 +1,7 @@
 use crate::hal;
 use crate::onewire;
 use hal::prelude::*;
+use ufmt::{uDisplay, uwrite};
 
 const BUFFER_TOP_SENSOR_ADD: [u8; 8] = [0x28, 0xFF, 0x4B, 0x96, 0x74, 0x16, 0x04, 0x6F];
 const BUFFER_BUTTOM_SENSOR_ADD: [u8; 8] = [0x28, 0xFF, 0x2F, 0x96, 0x74, 0x16, 0x04, 0x61];
@@ -14,13 +15,13 @@ const MEASURERESOLUTION: onewire::ds18b20::MeasureResolution =
     onewire::ds18b20::MeasureResolution::Bit09;
 
 /// Temperatures in the plant
-#[derive(Default)]
+#[derive(Default, PartialEq)]
 pub struct PlantTemperatures {
-    pub warm_water: Option<i16>,
-    pub buffer_top: Option<i16>,
-    pub buffer_buttom: Option<i16>,
-    pub heat_flow: Option<i16>,
-    pub heat_return: Option<i16>,
+    pub warm_water: Option<f32>,
+    pub buffer_top: Option<f32>,
+    pub buffer_buttom: Option<f32>,
+    pub heat_flow: Option<f32>,
+    pub heat_return: Option<f32>,
 }
 
 pub struct Sensors {
@@ -56,7 +57,7 @@ impl Sensors {
         }
     }
 
-    pub fn print_sensors(&mut self, serial: &mut hal::usart::WriteUsart0<crate::Clock>) {
+    pub fn print_sensors(&mut self, mut serial: &mut hal::usart::WriteUsart0<crate::Clock>) {
         // Create the search state
         let mut search_state = onewire::SearchState::new();
 
@@ -71,10 +72,8 @@ impl Sensors {
             ) {
                 Ok(Some(rom_no)) => {
                     serial.write_str("Found Device: ").ok();
-                    let mut buffer = num_format::Buffer::default();
                     for byte in rom_no.iter() {
-                        buffer.write_formatted(byte, &num_format::Locale::de);
-                        serial.write_str(buffer.as_str()).ok();
+                        uwrite!(&mut serial, "{}", byte).ok();
                         serial.write_char(' ').ok();
                     }
                     serial.write_char('\n').ok();

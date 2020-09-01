@@ -33,6 +33,7 @@
 
 #![no_std]
 #![no_main]
+#![feature(abi_avr_interrupt)]
 
 // Pull in the panic handler from panic-halt
 extern crate avr_std_stub;
@@ -41,6 +42,8 @@ use atmega328p_hal as hal;
 use atmega328p_hal::atmega328p as chip;
 use hal::prelude::*;
 
+use ufmt::{derive::uDebug, uwrite};
+
 type Clock = hal::clock::MHz16;
 
 const DISPLAY_ADD_I2C: u8 = 0x27;
@@ -48,6 +51,22 @@ const DISPLAY_ADD_I2C: u8 = 0x27;
 mod io;
 mod onewire;
 mod temperature;
+mod timer;
+
+#[derive(PartialEq, Copy, Clone)]
+enum State {
+    Init,
+    BufferOff,
+    BufferOn,
+    ActivatePump,
+}
+
+#[derive(PartialEq)]
+struct PlantState {
+    temperature: temperature::PlantTemperatures,
+    inputs: io::Inputs,
+    outputs: io::Outputs,
+}
 
 fn setup() -> (
     io::Inputs,
@@ -59,6 +78,7 @@ fn setup() -> (
         >,
     >,
     temperature::Sensors,
+    timer::Timer1,
 ) {
     // Get Peripherals for configuration
     let peripherals = chip::Peripherals::take().unwrap();
@@ -97,6 +117,7 @@ fn setup() -> (
     let mut delay = hal::delay::Delay::<Clock>::new();
     // Create the display
     let mut display = hd44780_driver::HD44780::new_i2c(i2c, DISPLAY_ADD_I2C, &mut delay).unwrap();
+
     display.reset(&mut delay).unwrap();
     display.clear(&mut delay).unwrap();
     display
@@ -109,6 +130,8 @@ fn setup() -> (
             &mut delay,
         )
         .unwrap();
+
+    display.write_str("Heat Control Init...", &mut delay).ok();
 
     // ------------------
     // Init the Sensors
@@ -126,55 +149,96 @@ fn setup() -> (
     // digital IOs
     // ------------------
     serial.write_str("Initializing Digital IOs\n").ok();
-    let inputs = io::Inputs {
-        heating_pump: portc.pc1.into_floating_input(&portc.ddr).downgrade(),
-        start_burner: portc.pc3.into_floating_input(&portc.ddr).downgrade(),
-        warm_water_pump: portc.pc0.into_floating_input(&portc.ddr).downgrade(),
-    };
+    let inputs = io::Inputs::new(
+        portc.pc3.into_floating_input(&portc.ddr).downgrade(),
+        portc.pc0.into_floating_input(&portc.ddr).downgrade(),
+        portc.pc1.into_floating_input(&portc.ddr).downgrade(),
+    );
 
-    let outputs = io::Outputs {
-        burner_inhibit: portd.pd6.into_output(&portd.ddr).downgrade(),
-        magnet_valve_buffer: portd.pd5.into_output(&portd.ddr).downgrade(),
-        pump_buffer: portd.pd4.into_output(&portd.ddr).downgrade(),
-    };
+    let outputs = io::Outputs::new(
+        portd.pd6.into_output(&portd.ddr).downgrade(),
+        portd.pd4.into_output(&portd.ddr).downgrade(),
+        portd.pd5.into_output(&portd.ddr).downgrade(),
+    );
+
+    // ------------------
+    // TIMER
+    // ------------------
+    let timer1 = timer::Timer1::new(peripherals.TC1);
+
+    // At this point we can enable interrupts
+    unsafe {
+        avr_device::interrupt::enable();
+    }
 
     serial.write_str("Initialization Done!\n").ok();
-    (inputs, outputs, serial, display, temperature_sensors)
+    (
+        inputs,
+        outputs,
+        serial,
+        display,
+        temperature_sensors,
+        timer1,
+    )
 }
 
 #[hal::entry]
 fn main() -> ! {
-    // This line forces the compiler to pull in the panic function. If the panic function can not be triggerd in main, but in a module, a linker error occures
-    let _: () = Some(()).unwrap();
-
     // Init the hardware
-    let (inputs, outputs, mut serial, display, mut sensors) = setup();
+    let (mut inputs, mut outputs, mut serial, display, mut sensors, timer1) = setup();
 
+    // Output the sensors on the bus to serial
     sensors.print_sensors(&mut serial);
 
-    let mut delay = hal::delay::Delay::<Clock>::new();
+    // Main Application Loop with state machine
+    let mut state = State::Init;
+    let mut old_state = State::Init;
+    let mut new = false;
+    let mut time = 0_u32; // Seconds since start
+    let mut time_in_state = 0_u32; // Seconds in state
 
+    let mut delay = hal::delay::Delay::<Clock>::new();
     loop {
-        serial.write_str("Reading Temperature ... ").ok();
-        if let Some(plant_temp) = sensors.read_temperatures() {
-            serial.write_str("Done\n").ok();
-            if let Some(temp) = plant_temp.heat_flow {
-                serial.write_str("Temp Heat Flow: ").ok();
-                let mut buffer = num_format::Buffer::default();
-                buffer.write_formatted(&(temp as u8), &num_format::Locale::de);
-                serial.write_str(buffer.as_str()).ok();
-                serial.write_str("°C\n").ok();
+        // Get Input state
+        inputs.get_inputs();
+        let temperature = sensors.read_temperatures();
+
+        // Handle the statemachine
+        new = state != old_state;
+        if new {
+            time = timer1.get_time();
+        };
+        old_state = state;
+
+        time_in_state = timer1.get_time().wrapping_sub(time);
+
+        match state {
+            State::Init => {
+                if new {};
+                if time_in_state > 5 {
+                    state = State::BufferOff;
+                }
             }
-            if let Some(temp) = plant_temp.heat_return {
-                serial.write_str("Temp Heat Return: ").ok();
-                let mut buffer = num_format::Buffer::default();
-                buffer.write_formatted(&(temp as u8), &num_format::Locale::de);
-                serial.write_str(buffer.as_str()).ok();
-                serial.write_str("°C\n").ok();
+            State::BufferOff => {
+                if new {
+                    serial.write_str("New State: Buffer Off\n").ok();
+                };
             }
-        } else {
-            serial.write_str("Error\n").ok();
+            State::BufferOn => {
+                if new {
+                    serial.write_str("New State: Buffer On\n").ok();
+                };
+            }
+            State::ActivatePump => {
+                if new {
+                    serial.write_str("New State: Activate Pump\n").ok();
+                };
+            }
         }
+
         delay.delay_ms(1000_u16);
+
+        // Update Ouptuts
+        outputs.set_outputs();
     }
 }
