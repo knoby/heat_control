@@ -187,7 +187,8 @@ fn main() -> ! {
     let mut state = State::Init;
     let mut old_state = State::Init;
     let mut last_state = State::Init;
-    let mut time = 0_u32; // Seconds since start
+    let mut time_state_start = 0_u32; // Seconds since start
+    let mut time_since_send = 0_u32; // Seconds since last send of current state
 
     let mut delay = hal::delay::Delay::<Clock>::new();
 
@@ -204,12 +205,12 @@ fn main() -> ! {
         // Handle the statemachine
         let new = state != old_state;
         if new {
-            time = timer1.get_time();
+            time_state_start = timer1.get_time();
             last_state = state;
         };
         old_state = state;
 
-        let time_in_state = timer1.get_time().wrapping_sub(time);
+        let time_in_state = timer1.get_time().wrapping_sub(time_state_start);
 
         match state {
             State::Init => {
@@ -277,11 +278,14 @@ fn main() -> ! {
         // Update Ouptuts
         outputs.set_outputs();
 
-        // Send State to serial
-        send_current_state(&inputs, &outputs, &temperature, &state, &mut serial);
-
-        // Limit Update Rate
-        delay.delay_ms(1000_u16);
+        // Send State to serial if 5 seconds passed
+        if new || (time_in_state.wrapping_sub(time_since_send) > 5) {
+            send_current_state(&inputs, &outputs, &temperature, &state, &mut serial);
+            time_since_send = time_in_state;
+        } else {
+            // When not sending delay next loop
+            delay.delay_ms(500_u16);
+        }
     }
 }
 
