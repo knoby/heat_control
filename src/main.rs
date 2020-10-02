@@ -62,6 +62,20 @@ enum State {
     ActivatePump,
 }
 
+impl ufmt::uDisplay for State {
+    fn fmt<W>(&self, f: &mut ufmt::Formatter<'_, W>) -> Result<(), W::Error>
+    where
+        W: ufmt::uWrite + ?Sized,
+    {
+        match self {
+            State::Init => ufmt::uwrite!(f, "Init"),
+            State::BufferOff => ufmt::uwrite!(f, "Buffer Off"),
+            State::BufferOn => ufmt::uwrite!(f, "Buffer On"),
+            State::ActivatePump => ufmt::uwrite!(f, "Activate Pump"),
+        }
+    }
+}
+
 fn setup() -> (
     io::Inputs,
     io::Outputs,
@@ -215,7 +229,7 @@ fn main() -> ! {
         match state {
             State::Init => {
                 if new {
-                    uwriteln!(serial, "New State: Init\n").ok();
+                    uwriteln!(serial, "New State: Init").ok();
                     outputs.set_burner_inhibit(false);
                     outputs.set_magnet_valve_buffer(false);
                     outputs.set_pump_buffer(false);
@@ -294,7 +308,7 @@ fn send_current_state(
     inputs: &io::Inputs,
     outputs: &io::Outputs,
     temperatures: &temperature::PlantTemperatures,
-    _state: &State,
+    state: &State,
     serial: &mut hal::usart::WriteUsart0<Clock>,
 ) {
     // Temperatures
@@ -354,6 +368,9 @@ fn send_current_state(
         bool2onoff(outputs.get_burner_inhibit())
     )
     .ok();
+
+    // State
+    uwriteln!(serial, "--MQTT--State:={}", state).ok();
 }
 
 fn bool2onoff(var: bool) -> &'static str {
