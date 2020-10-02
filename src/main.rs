@@ -234,7 +234,7 @@ fn main() -> ! {
                     outputs.set_magnet_valve_buffer(false);
                     outputs.set_pump_buffer(false);
                 };
-                if time_in_state > 10 {
+                if time_in_state > 10 && temperature.buffer_top.is_some() {
                     state = State::BufferOff;
                 }
             }
@@ -247,10 +247,10 @@ fn main() -> ! {
                 };
                 // Switch off
                 if temperature.buffer_top.is_none() {
-                    state = State::BufferOff;
+                    state = State::Init;
                 } else if (temperature.buffer_top.unwrap()
                     > (temperature::MIN_BUFFER_TEMPERATURE + temperature::BUFFER_HYSTERESIS))
-                    && inputs.get_warm_water_pump()
+                    && !inputs.get_warm_water_pump()
                     && !inputs.get_start_burner()
                 {
                     state = State::BufferOn;
