@@ -1,13 +1,15 @@
 use crate::hal;
 use crate::onewire;
 use hal::prelude::*;
-use ufmt::{uDisplay, uwrite};
+use ufmt::uwrite;
 
 const BUFFER_TOP_SENSOR_ADD: [u8; 8] = [0x28, 0xFF, 0x4B, 0x96, 0x74, 0x16, 0x04, 0x6F];
 const BUFFER_BUTTOM_SENSOR_ADD: [u8; 8] = [0x28, 0xFF, 0x2F, 0x96, 0x74, 0x16, 0x04, 0x61];
 const WARM_WATER_SENSOR_ADD: [u8; 8] = [0x28, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-const HEAT_FLOW_SENSOR_ADD: [u8; 8] = [40, 255, 65, 130, 88, 22, 4, 203];
-const HEAT_RETURN_SENSOR_ADD: [u8; 8] = [40, 255, 123, 88, 85, 22, 3, 123];
+const BOILER_SENSOR_ADD: [u8; 8] = [40, 255, 65, 130, 88, 22, 4, 203];
+
+pub const MIN_BUFFER_TEMPERATURE: f32 = 55.0; // °C
+pub const BUFFER_HYSTERESIS: f32 = 5.0; // K
 
 const _ALARM_TEMP_LOW: i8 = 5;
 const _ALARM_TEMP_HIGH: i8 = 95;
@@ -20,8 +22,7 @@ pub struct PlantTemperatures {
     pub warm_water: Option<f32>,
     pub buffer_top: Option<f32>,
     pub buffer_buttom: Option<f32>,
-    pub heat_flow: Option<f32>,
-    pub heat_return: Option<f32>,
+    pub boiler: Option<f32>,
 }
 
 pub struct Sensors {
@@ -29,8 +30,7 @@ pub struct Sensors {
     warm_water: Option<onewire::DS18B20>,
     buffer_top: Option<onewire::DS18B20>,
     buffer_buttom: Option<onewire::DS18B20>,
-    heat_flow: Option<onewire::DS18B20>,
-    heat_return: Option<onewire::DS18B20>,
+    boiler: Option<onewire::DS18B20>,
 }
 
 impl Sensors {
@@ -44,16 +44,14 @@ impl Sensors {
         let warm_water = init_sensor(WARM_WATER_SENSOR_ADD, &mut delay, &mut bus);
         let buffer_top = init_sensor(BUFFER_TOP_SENSOR_ADD, &mut delay, &mut bus);
         let buffer_buttom = init_sensor(BUFFER_BUTTOM_SENSOR_ADD, &mut delay, &mut bus);
-        let heat_flow = init_sensor(HEAT_FLOW_SENSOR_ADD, &mut delay, &mut bus);
-        let heat_return = init_sensor(HEAT_RETURN_SENSOR_ADD, &mut delay, &mut bus);
+        let boiler = init_sensor(BOILER_SENSOR_ADD, &mut delay, &mut bus);
 
         Sensors {
             bus,
             warm_water,
             buffer_top,
             buffer_buttom,
-            heat_flow,
-            heat_return,
+            boiler,
         }
     }
 
@@ -117,11 +115,8 @@ impl Sensors {
         if let Some(sensor) = self.buffer_top.as_mut() {
             temperatures.buffer_top = sensor.read_temperature(&mut self.bus, &mut delay).ok();
         }
-        if let Some(sensor) = self.heat_flow.as_mut() {
-            temperatures.heat_flow = sensor.read_temperature(&mut self.bus, &mut delay).ok();
-        }
-        if let Some(sensor) = self.heat_return.as_mut() {
-            temperatures.heat_return = sensor.read_temperature(&mut self.bus, &mut delay).ok();
+        if let Some(sensor) = self.boiler.as_mut() {
+            temperatures.boiler = sensor.read_temperature(&mut self.bus, &mut delay).ok();
         }
 
         Some(temperatures)

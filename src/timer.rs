@@ -1,6 +1,5 @@
 //! Basic implementation of a timer to be able to calculate time in a state
 
-use atmega328p_hal as hal;
 use atmega328p_hal::atmega328p as chip;
 
 /// Holds the time since the application is running

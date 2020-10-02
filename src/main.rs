@@ -28,12 +28,12 @@
 //! - WARMWATER {0x28, 0xff, 0x4b, 0x96, 0x74, 0x16, 0x04, 0x6f}
 //! - BUFFERTOP {0x28, 0xFF, 0x4B, 0x96, 0x74, 0x16, 0x04, 0x6F}
 //! - BUFFERBOTTOM {0x28, 0xFF, 0x2F, 0x96, 0x74, 0x16, 0x04, 0x61}
-//! - HEAT_FLOW {0x28, 0xFF, 0x2C, 0x99, 0x74, 0x16, 0x04, 0xB5}
-//! - HEAT_RETURN {0x28, 0xff, 0x4b, 0x96, 0x74, 0x16, 0x04, 0x00}
+//! - BOILER {0x28, 0xFF, 0x2C, 0x99, 0x74, 0x16, 0x04, 0xB5}
 
 #![no_std]
 #![no_main]
 #![feature(abi_avr_interrupt)]
+#![feature(llvm_asm)]
 
 // Pull in the panic handler from panic-halt
 extern crate avr_std_stub;
@@ -42,7 +42,8 @@ use atmega328p_hal as hal;
 use atmega328p_hal::atmega328p as chip;
 use hal::prelude::*;
 
-use ufmt::{derive::uDebug, uwrite};
+use ufmt::uwriteln;
+use ufmt_float::uFmt_f32;
 
 type Clock = hal::clock::MHz16;
 
@@ -59,13 +60,6 @@ enum State {
     BufferOff,
     BufferOn,
     ActivatePump,
-}
-
-#[derive(PartialEq)]
-struct PlantState {
-    temperature: temperature::PlantTemperatures,
-    inputs: io::Inputs,
-    outputs: io::Outputs,
 }
 
 fn setup() -> (
@@ -101,22 +95,23 @@ fn setup() -> (
     )
     .split();
 
-    serial.write_str("Heat Control\n").ok();
-    serial.write_str("Start Initialization ...\n").ok();
+    uwriteln!(serial, "Heat Control").ok();
+    uwriteln!(serial, "Start Initialization ...").ok();
 
     // ------------------
     // I2C Display
     // ------------------
-    serial.write_str("Initializing I2C LCD\n").ok();
+    uwriteln!(serial, "Initializing I2C LCD").ok();
     let sda = portc.pc4.into_pull_up_input(&portc.ddr);
     let scl = portc.pc5.into_pull_up_input(&portc.ddr);
 
-    // Create the i2c bus
-    let i2c = hal::i2c::I2c::<Clock, _>::new(peripherals.TWI, sda, scl, 400_000);
     // Delay for display
     let mut delay = hal::delay::Delay::<Clock>::new();
+    // Create the i2c bus
+    let i2c = hal::i2c::I2c::<Clock, _>::new(peripherals.TWI, sda, scl, 400_000);
     // Create the display
     let mut display = hd44780_driver::HD44780::new_i2c(i2c, DISPLAY_ADD_I2C, &mut delay).unwrap();
+    uwriteln!(serial, "I2C LCD Init Done").ok();
 
     display.reset(&mut delay).unwrap();
     display.clear(&mut delay).unwrap();
@@ -136,9 +131,7 @@ fn setup() -> (
     // ------------------
     // Init the Sensors
     // ------------------
-    serial
-        .write_str("Initialize OneWire DS18b20 Sensors\n")
-        .ok();
+    uwriteln!(serial, "Initialize OneWire DS18b20 Sensors").ok();
     // Split the pin for one wire
     let pd2 = portd.pd2.into_tri_state(&portd.ddr);
 
@@ -148,7 +141,7 @@ fn setup() -> (
     // ------------------
     // digital IOs
     // ------------------
-    serial.write_str("Initializing Digital IOs\n").ok();
+    uwriteln!(serial, "Initialize digital IOs").ok();
     let inputs = io::Inputs::new(
         portc.pc3.into_floating_input(&portc.ddr).downgrade(),
         portc.pc0.into_floating_input(&portc.ddr).downgrade(),
@@ -166,12 +159,12 @@ fn setup() -> (
     // ------------------
     let timer1 = timer::Timer1::new(peripherals.TC1);
 
-    // At this point we can enable interrupts
+    // Enable Interrupts
     unsafe {
         avr_device::interrupt::enable();
     }
 
-    serial.write_str("Initialization Done!\n").ok();
+    uwriteln!(serial, "Initialization Done!").ok();
     (
         inputs,
         outputs,
@@ -185,7 +178,7 @@ fn setup() -> (
 #[hal::entry]
 fn main() -> ! {
     // Init the hardware
-    let (mut inputs, mut outputs, mut serial, display, mut sensors, timer1) = setup();
+    let (mut inputs, mut outputs, mut serial, _display, mut sensors, timer1) = setup();
 
     // Output the sensors on the bus to serial
     sensors.print_sensors(&mut serial);
@@ -193,52 +186,176 @@ fn main() -> ! {
     // Main Application Loop with state machine
     let mut state = State::Init;
     let mut old_state = State::Init;
-    let mut new = false;
+    let mut last_state = State::Init;
     let mut time = 0_u32; // Seconds since start
-    let mut time_in_state = 0_u32; // Seconds in state
 
     let mut delay = hal::delay::Delay::<Clock>::new();
+
     loop {
         // Get Input state
         inputs.get_inputs();
-        let temperature = sensors.read_temperatures();
+
+        // Handle Error Case
+        let temperature = sensors.read_temperatures().unwrap_or_else(|| {
+            state = State::Init;
+            temperature::PlantTemperatures::default()
+        });
 
         // Handle the statemachine
-        new = state != old_state;
+        let new = state != old_state;
         if new {
             time = timer1.get_time();
+            last_state = state;
         };
         old_state = state;
 
-        time_in_state = timer1.get_time().wrapping_sub(time);
+        let time_in_state = timer1.get_time().wrapping_sub(time);
 
         match state {
             State::Init => {
-                if new {};
-                if time_in_state > 5 {
+                if new {
+                    uwriteln!(serial, "New State: Init\n").ok();
+                    outputs.set_burner_inhibit(false);
+                    outputs.set_magnet_valve_buffer(false);
+                    outputs.set_pump_buffer(false);
+                };
+                if time_in_state > 10 {
                     state = State::BufferOff;
                 }
             }
             State::BufferOff => {
                 if new {
-                    serial.write_str("New State: Buffer Off\n").ok();
+                    uwriteln!(serial, "New State: Buffer Off").ok();
+                    outputs.set_burner_inhibit(false);
+                    outputs.set_magnet_valve_buffer(false);
+                    outputs.set_pump_buffer(false);
                 };
+                // Switch off
+                if temperature.buffer_top.is_none() {
+                    state = State::BufferOff;
+                } else if (temperature.buffer_top.unwrap()
+                    > (temperature::MIN_BUFFER_TEMPERATURE + temperature::BUFFER_HYSTERESIS))
+                    && inputs.get_warm_water_pump()
+                    && !inputs.get_start_burner()
+                {
+                    state = State::BufferOn;
+                }
             }
             State::BufferOn => {
                 if new {
-                    serial.write_str("New State: Buffer On\n").ok();
+                    uwriteln!(serial, "New State: Buffer On").ok();
+                    outputs.set_burner_inhibit(true);
+                    outputs.set_magnet_valve_buffer(true);
+                    outputs.set_pump_buffer(false);
                 };
+                if temperature.buffer_top.is_none() {
+                    state = State::Init;
+                } else if temperature.buffer_top.unwrap() < temperature::MIN_BUFFER_TEMPERATURE {
+                    state = State::BufferOff;
+                } else if inputs.get_start_burner() {
+                    // Check if burner is still on
+                    if last_state != State::ActivatePump || time_in_state > 60 {
+                        state = State::ActivatePump;
+                    }
+                }
             }
             State::ActivatePump => {
                 if new {
-                    serial.write_str("New State: Activate Pump\n").ok();
+                    uwriteln!(serial, "New State: Activate Pump").ok();
+                    outputs.set_burner_inhibit(true);
+                    outputs.set_magnet_valve_buffer(true);
+                    outputs.set_pump_buffer(true);
                 };
+                if temperature.buffer_top.is_none() {
+                    state = State::Init;
+                } else if time_in_state > 60 {
+                    state = State::ActivatePump;
+                }
             }
         }
 
-        delay.delay_ms(1000_u16);
-
         // Update Ouptuts
         outputs.set_outputs();
+
+        // Send State to serial
+        send_current_state(&inputs, &outputs, &temperature, &state, &mut serial);
+
+        // Limit Update Rate
+        delay.delay_ms(1000_u16);
+    }
+}
+
+/// Send current state to serial.
+fn send_current_state(
+    inputs: &io::Inputs,
+    outputs: &io::Outputs,
+    temperatures: &temperature::PlantTemperatures,
+    _state: &State,
+    serial: &mut hal::usart::WriteUsart0<Clock>,
+) {
+    // Temperatures
+    if let Some(temp_float) = temperatures.buffer_top {
+        let temp_str = uFmt_f32::One(temp_float);
+        uwriteln!(serial, "--MQTT--Temperatur/Puffer_Oben:={}", temp_str).ok();
+    }
+    if let Some(temp_float) = temperatures.buffer_buttom {
+        let temp_str = uFmt_f32::One(temp_float);
+        uwriteln!(serial, "--MQTT--Temperatur/Puffer_Unten:={}", temp_str).ok();
+    }
+    if let Some(temp_float) = temperatures.boiler {
+        let temp_str = uFmt_f32::One(temp_float);
+        uwriteln!(serial, "--MQTT--Temperatur/Kessel:={}", temp_str).ok();
+    }
+    if let Some(temp_float) = temperatures.warm_water {
+        let temp_str = uFmt_f32::One(temp_float);
+        uwriteln!(serial, "--MQTT--Temperatur/Warmwasser:={}", temp_str).ok();
+    }
+
+    // Inputs
+    uwriteln!(
+        serial,
+        "--MQTT--Inputs/Brenner_Start:={}",
+        bool2onoff(inputs.get_start_burner())
+    )
+    .ok();
+    uwriteln!(
+        serial,
+        "--MQTT--Inputs/Pumpe_Warmwasser:={}",
+        bool2onoff(inputs.get_warm_water_pump())
+    )
+    .ok();
+    uwriteln!(
+        serial,
+        "--MQTT--Inputs/Pumpe_Heizung:={}",
+        bool2onoff(inputs.get_heating_pump())
+    )
+    .ok();
+
+    // Outputs
+    uwriteln!(
+        serial,
+        "--MQTT--Outputs/Magnetventil_Puffer:={}",
+        bool2onoff(outputs.get_magnet_valve_buffer())
+    )
+    .ok();
+    uwriteln!(
+        serial,
+        "--MQTT--Outputs/Pumpe_Puffer:={}",
+        bool2onoff(outputs.get_pump_buffer())
+    )
+    .ok();
+    uwriteln!(
+        serial,
+        "--MQTT--Outputs/Brenner_Sperre:={}",
+        bool2onoff(outputs.get_burner_inhibit())
+    )
+    .ok();
+}
+
+fn bool2onoff(var: bool) -> &'static str {
+    if var {
+        "on"
+    } else {
+        "off"
     }
 }

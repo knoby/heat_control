@@ -3,7 +3,7 @@
 [[package]]
 name = "atmega328p-hal"
 version = "0.1.0"
-source = "git+https://github.com/Rahix/avr-hal#770adb305de6bd307d53fb14499fbcabec477267"
+source = "git+https://github.com/Rahix/avr-hal#2a59d441a5b9506b3cbfac21e532639733a6314a"
 dependencies = [
  "avr-device",
  "avr-hal-generic",
@@ -35,7 +35,7 @@ dependencies = [
 [[package]]
 name = "avr-hal-generic"
 version = "0.1.0"
-source = "git+https://github.com/Rahix/avr-hal#770adb305de6bd307d53fb14499fbcabec477267"
+source = "git+https://github.com/Rahix/avr-hal#2a59d441a5b9506b3cbfac21e532639733a6314a"
 dependencies = [
  "avr-device",
  "cfg-if",
@@ -85,8 +85,9 @@ dependencies = [
 
 [[package]]
 name = "hd44780-driver"
-version = "0.3.0"
-source = "git+https://github.com/JohnDoneth/hd44780-driver#84a30c5ae793f5bce268424eb3a539143d54cf89"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aab2b13fdeaed7dde9133a57c28b2cbde4a8fc8c3196b5631428aad114857d3a"
 dependencies = [
  "embedded-hal",
 ]
@@ -102,8 +103,15 @@ dependencies = [
  "embedded-hal",
  "hd44780-driver",
  "ufmt",
+ "ufmt_float",
  "void",
 ]
+
+[[package]]
+name = "micromath"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "be00a244d4394124986da477e8b2814dcb7995ab238817d9037bc336c4b0b843"
 
 [[package]]
 name = "nb"
@@ -122,9 +130,9 @@ checksum = "546c37ac5d9e56f55e73b677106873d9d9f5190605e41a856503623648488cae"
 
 [[package]]
 name = "paste"
-version = "1.0.0"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6ddc8e145de01d9180ac7b78b9676f95a9c2447f6a88b2c2a04702211bc5d71"
+checksum = "0520af26d4cf99643dbbe093a61507922b57232d9978d8491fdc8f7b44573c8c"
 
 [[package]]
 name = "proc-macro-hack"
@@ -134,9 +142,9 @@ checksum = "99c605b9a0adc77b7211c6b1f722dcb613d68d66859a44f3d485a6da332b0598"
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.19"
+version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04f5f085b5d71e2188cb8271e5da0161ad52c3f227a661a3c135fdf28e258b12"
+checksum = "51ef7cd2518ead700af67bf9d1a658d90b6037d77110fd9c0445429d0ba1c6c9"
 dependencies = [
  "unicode-xid",
 ]
@@ -176,9 +184,9 @@ checksum = "388a1df253eca08550bef6c72392cfe7c30914bf41df5269b68cbd6ff8f570a3"
 
 [[package]]
 name = "syn"
-version = "1.0.39"
+version = "1.0.42"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "891d8d6567fe7c7f8835a3a98af4208f3846fba258c1bc3c31d6e506239f11f9"
+checksum = "9c51d92969d209b54a98397e1b91c8ae82d8c87a7bb87df0b29aa2ad81454228"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -213,6 +221,16 @@ name = "ufmt-write"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e87a2ed6b42ec5e28cc3b94c09982969e9227600b2e3dcbc1db927a84c06bd69"
+
+[[package]]
+name = "ufmt_float"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a59f843b330b7315292f64f281ae53495687709b10782cbdfb9f309caea33ab6"
+dependencies = [
+ "micromath",
+ "ufmt",
+]
 
 [[package]]
 name = "unicode-xid"

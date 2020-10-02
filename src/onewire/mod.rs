@@ -1,6 +1,5 @@
 #![allow(dead_code)]
 
-use atmega328p_hal::prelude::*;
 use core::cmp::Ordering;
 use embedded_hal as hal;
 use hal::blocking::delay::DelayUs;

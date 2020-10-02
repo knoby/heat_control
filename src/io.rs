@@ -22,10 +22,6 @@ impl PartialEq for Outputs {
             && (self.magnet_valve_buffer == other.magnet_valve_buffer)
             && (self.burner_inhibit == other.burner_inhibit)
     }
-
-    fn ne(&self, other: &Self) -> bool {
-        !self.ne(other)
-    }
 }
 
 impl Outputs {
@@ -47,21 +43,21 @@ impl Outputs {
     /// Set the physical outputs according to the setvalue
     pub fn set_outputs(&mut self) {
         if self.burner_inhibit {
-            self.burner_inhibit_pin.set_high();
+            self.burner_inhibit_pin.set_high().void_unwrap();
         } else {
-            self.burner_inhibit_pin.set_low();
+            self.burner_inhibit_pin.set_low().void_unwrap();
         }
 
         if self.magnet_valve_buffer {
-            self.magnet_valve_buffer_pin.set_high();
+            self.magnet_valve_buffer_pin.set_high().void_unwrap();
         } else {
-            self.magnet_valve_buffer_pin.set_low();
+            self.magnet_valve_buffer_pin.set_low().void_unwrap();
         }
 
         if self.pump_buffer {
-            self.pump_buffer_pin.set_high();
+            self.pump_buffer_pin.set_high().void_unwrap();
         } else {
-            self.pump_buffer_pin.set_low();
+            self.pump_buffer_pin.set_low().void_unwrap();
         }
     }
 
@@ -75,6 +71,18 @@ impl Outputs {
 
     pub fn set_pump_buffer(&mut self, value: bool) {
         self.pump_buffer = value
+    }
+
+    pub fn get_magnet_valve_buffer(&self) -> bool {
+        self.magnet_valve_buffer
+    }
+
+    pub fn get_burner_inhibit(&self) -> bool {
+        self.burner_inhibit
+    }
+
+    pub fn get_pump_buffer(&self) -> bool {
+        self.pump_buffer
     }
 }
 
@@ -127,9 +135,5 @@ impl PartialEq for Inputs {
         (self.start_burner == other.start_burner)
             && (self.warm_water_pump == other.warm_water_pump)
             && (self.heating_pump == other.heating_pump)
-    }
-
-    fn ne(&self, other: &Self) -> bool {
-        !self.eq(other)
     }
 }

@@ -11,6 +11,7 @@ avr-std-stub = "1.0.2"
 crc-any = {version = "2.3.5", default-features = false}
 embedded-hal = "0.2.3"
 ufmt = "0.1.0"
+ufmt_float = "0.1.0"
 
 [dependencies.avr-device]
 features = ["atmega328p"]
@@ -21,7 +22,9 @@ default_features = false
 version = "*"
 
 [dependencies.hd44780-driver]
-git = "https://github.com/JohnDoneth/hd44780-driver"
+# git = "https://github.com/JohnDoneth/hd44780-driver"
+version = "0.4.0"
+# path = "../hd44780-driver"
 
 [dependencies.atmega328p-hal]
 features = ["rt"]
