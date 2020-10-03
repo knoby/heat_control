@@ -228,6 +228,7 @@ fn main() -> ! {
         if new {
             time_state_start = timer1.get_time();
             last_state = state;
+            uwriteln!(serial, "New State: {}", state).ok();
         };
         old_state = state;
 
@@ -236,7 +237,6 @@ fn main() -> ! {
         match state {
             State::Init => {
                 if new {
-                    uwriteln!(serial, "New State: Init").ok();
                     outputs.set_burner_inhibit(false);
                     outputs.set_magnet_valve_buffer(false);
                     outputs.set_pump_buffer(false);
@@ -247,7 +247,6 @@ fn main() -> ! {
             }
             State::BufferOff => {
                 if new {
-                    uwriteln!(serial, "New State: Buffer Off").ok();
                     outputs.set_burner_inhibit(false);
                     outputs.set_magnet_valve_buffer(false);
                     outputs.set_pump_buffer(false);
@@ -265,7 +264,6 @@ fn main() -> ! {
             }
             State::BufferOn => {
                 if new {
-                    uwriteln!(serial, "New State: Buffer On").ok();
                     outputs.set_burner_inhibit(true);
                     outputs.set_magnet_valve_buffer(true);
                     outputs.set_pump_buffer(false);
@@ -283,7 +281,6 @@ fn main() -> ! {
             }
             State::ActivatePump => {
                 if new {
-                    uwriteln!(serial, "New State: Activate Pump").ok();
                     outputs.set_burner_inhibit(true);
                     outputs.set_magnet_valve_buffer(true);
                     outputs.set_pump_buffer(true);
@@ -304,10 +301,10 @@ fn main() -> ! {
             send_current_state(&inputs, &outputs, &temperature, &state, &mut serial);
             update_display(&mut display, 32.1, 34.4, state);
             time_since_send = time_in_state;
-        } else {
-            // When not sending delay next loop
-            delay.delay_ms(500_u16);
         }
+
+        // Delay next update cycle
+        delay.delay_ms(500_u16);
     }
 }
 
