@@ -42,8 +42,7 @@ use atmega328p_hal as hal;
 use atmega328p_hal::atmega328p as chip;
 use hal::prelude::*;
 
-use ufmt::uwriteln;
-use ufmt_float::uFmt_f32;
+use ufmt::{uwrite, uwriteln};
 
 type Clock = hal::clock::MHz16;
 
@@ -53,6 +52,12 @@ mod io;
 mod onewire;
 mod temperature;
 mod timer;
+
+type Display = hd44780_driver::HD44780<
+    hd44780_driver::bus::I2CBus<
+        hal::i2c::I2c<Clock, hal::port::mode::Input<hal::port::mode::PullUp>>,
+    >,
+>;
 
 #[derive(PartialEq, Copy, Clone)]
 enum State {
@@ -67,11 +72,17 @@ impl ufmt::uDisplay for State {
     where
         W: ufmt::uWrite + ?Sized,
     {
+        ufmt::uwrite!(f, "{}", self.to_string())
+    }
+}
+
+impl State {
+    fn to_string(&self) -> &'static str {
         match self {
-            State::Init => ufmt::uwrite!(f, "Init"),
-            State::BufferOff => ufmt::uwrite!(f, "Buffer Off"),
-            State::BufferOn => ufmt::uwrite!(f, "Buffer On"),
-            State::ActivatePump => ufmt::uwrite!(f, "Activate Pump"),
+            State::Init => "Init",
+            State::BufferOff => "Buffer  Off",
+            State::BufferOn => "Buffer On",
+            State::ActivatePump => "Activate Pump",
         }
     }
 }
@@ -80,11 +91,7 @@ fn setup() -> (
     io::Inputs,
     io::Outputs,
     hal::usart::WriteUsart0<Clock>,
-    hd44780_driver::HD44780<
-        hd44780_driver::bus::I2CBus<
-            hal::i2c::I2c<Clock, hal::port::mode::Input<hal::port::mode::PullUp>>,
-        >,
-    >,
+    Display,
     temperature::Sensors,
     timer::Timer1,
 ) {
@@ -140,7 +147,7 @@ fn setup() -> (
         )
         .unwrap();
 
-    display.write_str("Heat Control Init...", &mut delay).ok();
+    display.write_str("Heat Control", &mut delay).ok();
 
     // ------------------
     // Init the Sensors
@@ -192,7 +199,7 @@ fn setup() -> (
 #[hal::entry]
 fn main() -> ! {
     // Init the hardware
-    let (mut inputs, mut outputs, mut serial, _display, mut sensors, timer1) = setup();
+    let (mut inputs, mut outputs, mut serial, mut display, mut sensors, timer1) = setup();
 
     // Output the sensors on the bus to serial
     sensors.print_sensors(&mut serial);
@@ -295,12 +302,31 @@ fn main() -> ! {
         // Send State to serial if 5 seconds passed
         if new || (time_in_state.wrapping_sub(time_since_send) > 5) {
             send_current_state(&inputs, &outputs, &temperature, &state, &mut serial);
+            update_display(&mut display, 32.1, 34.4, state);
             time_since_send = time_in_state;
         } else {
             // When not sending delay next loop
             delay.delay_ms(500_u16);
         }
     }
+}
+
+fn update_display(display: &mut Display, puffer_oben: f32, puffer_unten: f32, state: State) {
+    let mut delay = hal::delay::Delay::<Clock>::new();
+
+    // Reset Disply
+    display.clear(&mut delay).ok();
+
+    // Print Current State
+    display.write_str(state.to_string(), &mut delay).ok();
+
+    // Create line with temperatures
+    let mut line = heapless::Vec::<u8, heapless::consts::U16>::new();
+    uwrite!(line, "O:{}°C U:{}°C", puffer_oben as u8, puffer_unten as u8).ok();
+
+    // Send to display
+    display.set_cursor_pos(40, &mut delay).ok();
+    display.write_bytes(&line, &mut delay).ok();
 }
 
 /// Send current state to serial.
@@ -312,21 +338,38 @@ fn send_current_state(
     serial: &mut hal::usart::WriteUsart0<Clock>,
 ) {
     // Temperatures
+
     if let Some(temp_float) = temperatures.buffer_top {
-        let temp_str = uFmt_f32::One(temp_float);
-        uwriteln!(serial, "--MQTT--Temperatur/Puffer_Oben:={}", temp_str).ok();
+        uwriteln!(
+            serial,
+            "--MQTT--Temperatur/Puffer_Oben:={}",
+            (temp_float * 10.0) as i32
+        )
+        .ok();
     }
     if let Some(temp_float) = temperatures.buffer_buttom {
-        let temp_str = uFmt_f32::One(temp_float);
-        uwriteln!(serial, "--MQTT--Temperatur/Puffer_Unten:={}", temp_str).ok();
+        uwriteln!(
+            serial,
+            "--MQTT--Temperatur/Puffer_Unten:={}",
+            (temp_float * 10.0) as i32
+        )
+        .ok();
     }
     if let Some(temp_float) = temperatures.boiler {
-        let temp_str = uFmt_f32::One(temp_float);
-        uwriteln!(serial, "--MQTT--Temperatur/Kessel:={}", temp_str).ok();
+        uwriteln!(
+            serial,
+            "--MQTT--Temperatur/Kessel:={}",
+            (temp_float * 10.0) as i32
+        )
+        .ok();
     }
     if let Some(temp_float) = temperatures.warm_water {
-        let temp_str = uFmt_f32::One(temp_float);
-        uwriteln!(serial, "--MQTT--Temperatur/Warmwasser:={}", temp_str).ok();
+        uwriteln!(
+            serial,
+            "--MQTT--Temperatur/Warmwasser:={}",
+            (temp_float * 10.0) as i32
+        )
+        .ok();
     }
 
     // Inputs
