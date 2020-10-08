@@ -26,7 +26,7 @@ impl Timer1 {
         Self {}
     }
 
-    pub fn get_time(&self) -> u32 {
+    pub fn millis(&self) -> u32 {
         let mut my_time = 0;
         unsafe { avr_device::interrupt::free(|_| my_time = TIME) };
         my_time

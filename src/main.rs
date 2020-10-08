@@ -40,25 +40,23 @@ extern crate avr_std_stub;
 
 use atmega328p_hal as hal;
 use atmega328p_hal::atmega328p as chip;
-use core::fmt::Write;
 use hal::prelude::*;
-
-//use ufmt::{uwrite, uwriteln};
 
 type Clock = hal::clock::MHz16;
 
-const DISPLAY_ADD_I2C: u8 = 0x27;
+//const DISPLAY_ADD_I2C: u8 = 0x27;
 
 mod io;
 mod onewire;
+mod serial_logger;
 mod temperature;
 mod timer;
 
-type Display = hd44780_driver::HD44780<
+/*type Display = hd44780_driver::HD44780<
     hd44780_driver::bus::I2CBus<
         hal::i2c::I2c<Clock, hal::port::mode::Input<hal::port::mode::PullUp>>,
     >,
->;
+>; */
 
 #[derive(PartialEq, Copy, Clone)]
 #[repr(u8)]
@@ -67,6 +65,7 @@ enum State {
     BufferOff,
     BufferOn,
     ActivatePump,
+    Error,
 }
 
 impl core::fmt::Display for State {
@@ -82,32 +81,24 @@ impl State {
             State::BufferOff => "Buffer  Off",
             State::BufferOn => "Buffer On",
             State::ActivatePump => "Activate Pump",
+            State::Error => "Error",
         }
-    }
-}
-
-struct myserial {
-    serial: hal::usart::WriteUsart0<Clock>,
-}
-
-impl core::fmt::Write for myserial {
-    fn write_str(&mut self, s: &str) -> Result<(), core::fmt::Error> {
-        self.serial.write_str(s).ok();
-        Ok(())
     }
 }
 
 fn setup() -> (
     io::Inputs,
     io::Outputs,
-    //hal::usart::WriteUsart0<Clock>,
-    myserial,
-    Display,
+    serial_logger::SerialLogger,
     temperature::Sensors,
     timer::Timer1,
 ) {
     // Get Peripherals for configuration
     let peripherals = chip::Peripherals::take().unwrap();
+
+    // ------------------
+    // Watchdog
+    // ------------------
 
     // Get the ports
     let _portb = peripherals.PORTB.split();
@@ -119,7 +110,7 @@ fn setup() -> (
     // ------------------
     let rx = portd.pd0.into_floating_input(&portd.ddr);
     let tx = portd.pd1.into_output(&portd.ddr);
-    let (_, mut serial) = hal::usart::Usart0::<Clock, hal::port::mode::Floating>::new(
+    let (_, serial) = hal::usart::Usart0::<Clock, hal::port::mode::Floating>::new(
         peripherals.USART0,
         rx,
         tx,
@@ -127,55 +118,14 @@ fn setup() -> (
     )
     .split();
 
-    let mut serial = myserial { serial };
+    let mut serial = serial_logger::SerialLogger::new(serial, true, true, false);
 
-    writeln!(serial, "Heat Control").ok();
-    writeln!(serial, "Start Initialization ...").ok();
-
-    // ------------------
-    // I2C Display
-    // ------------------
-    writeln!(serial, "Initializing I2C LCD").ok();
-    let sda = portc.pc4.into_pull_up_input(&portc.ddr);
-    let scl = portc.pc5.into_pull_up_input(&portc.ddr);
-
-    // Delay for display
-    let mut delay = hal::delay::Delay::<Clock>::new();
-    // Create the i2c bus
-    let i2c = hal::i2c::I2c::<Clock, _>::new(peripherals.TWI, sda, scl, 400_000);
-    // Create the display
-    let mut display = hd44780_driver::HD44780::new_i2c(i2c, DISPLAY_ADD_I2C, &mut delay).unwrap();
-    writeln!(serial, "I2C LCD Init Done").ok();
-
-    display.reset(&mut delay).unwrap();
-    display.clear(&mut delay).unwrap();
-    display
-        .set_display_mode(
-            hd44780_driver::DisplayMode {
-                cursor_blink: hd44780_driver::CursorBlink::Off,
-                cursor_visibility: hd44780_driver::Cursor::Invisible,
-                display: hd44780_driver::Display::On,
-            },
-            &mut delay,
-        )
-        .unwrap();
-
-    display.write_str("Heat Control", &mut delay).ok();
-
-    // ------------------
-    // Init the Sensors
-    // ------------------
-    writeln!(serial, "Initialize OneWire DS18b20 Sensors").ok();
-    // Split the pin for one wire
-    let pd2 = portd.pd2.into_tri_state(&portd.ddr);
-
-    // Setup the onewire bus
-    let temperature_sensors = temperature::Sensors::setup(pd2.downgrade());
+    serial.info_str("Heat Control Init");
 
     // ------------------
     // digital IOs
     // ------------------
-    writeln!(serial, "Initialize digital IOs").ok();
+    serial.debug_str("Init IOs");
     let inputs = io::Inputs::new(
         portc.pc3.into_floating_input(&portc.ddr).downgrade(),
         portc.pc0.into_floating_input(&portc.ddr).downgrade(),
@@ -187,42 +137,169 @@ fn setup() -> (
         portd.pd4.into_output(&portd.ddr).downgrade(),
         portd.pd5.into_output(&portd.ddr).downgrade(),
     );
+    serial.debug_str("Done");
+
+    // ------------------
+    // I2C Display
+    // ------------------
+    /*
+        serial.debug_str("Init I2C Display");
+        let sda = portc.pc4.into_pull_up_input(&portc.ddr);
+        let scl = portc.pc5.into_pull_up_input(&portc.ddr);
+
+        // Delay for display
+        let mut delay = hal::delay::Delay::<Clock>::new();
+        // Create the i2c bus
+        let i2c = hal::i2c::I2c::<Clock, _>::new(peripherals.TWI, sda, scl, 400_000);
+        // Create the display
+        let mut display =
+            hd44780_driver::HD44780::new_i2c(i2c, DISPLAY_ADD_I2C, &mut delay).unwrap();
+
+        display.reset(&mut delay).unwrap();
+        display.clear(&mut delay).unwrap();
+        display
+            .set_display_mode(
+                hd44780_driver::DisplayMode {
+                    cursor_blink: hd44780_driver::CursorBlink::Off,
+                    cursor_visibility: hd44780_driver::Cursor::Invisible,
+                    display: hd44780_driver::Display::On,
+                },
+                &mut delay,
+            )
+            .unwrap();
+
+        display.write_str("Heat Control", &mut delay).ok();
+        serial.debug_str("Done");
+    */
+    // ------------------
+    // Init the Sensors
+    // ------------------
+    serial.debug_str("Init One Wire Sensors");
+    // Split the pin for one wire
+    let pd2 = portd.pd2.into_tri_state(&portd.ddr);
+
+    // Setup the onewire bus
+    let temperature_sensors = temperature::Sensors::setup(pd2.downgrade());
+    serial.debug_str("Done");
 
     // ------------------
     // TIMER
     // ------------------
+    serial.debug_str("Init Timer for millis");
     let timer1 = timer::Timer1::new(peripherals.TC1);
+    serial.debug_str("Done");
 
+    // ------------------
     // Enable Interrupts
+    // ------------------
+    serial.debug_str("Enable Interrupts");
     unsafe {
         avr_device::interrupt::enable();
     }
+    serial.debug_str("Done");
 
-    writeln!(serial, "Initialization Done!").ok();
-    (
-        inputs,
-        outputs,
-        serial,
-        display,
-        temperature_sensors,
-        timer1,
-    )
+    serial.debug_str("Init Done");
+
+    (inputs, outputs, serial, temperature_sensors, timer1)
 }
 
 #[hal::entry]
 fn main() -> ! {
     // Init the hardware
-    let (mut inputs, mut outputs, mut serial, mut display, mut sensors, timer1) = setup();
+    let (mut inputs, mut outputs, mut serial, /*mut display,*/ mut sensors, timer1) = setup();
 
-    // Output the sensors on the bus to serial
-    sensors.print_sensors(&mut serial);
+    // Some Variables used in the loop
+    let mut temp_reading: temperature::PlantTemperatures =
+        temperature::PlantTemperatures::default();
+    let mut new: bool;
+    let mut time_state_start = timer1.millis();
+    let mut time_send = timer1.millis();
+    let mut time_in_state = 0;
+    let mut state = State::Init;
+    let mut state_old = State::Init;
+    let mut state_last = State::Init;
 
     // Main Loop
     loop {
         // Get Input state
         inputs.get_inputs();
 
+        // Get Temperatures
+        //temp_reading = sensors.read_temperatures().unwrap_or_default();
+
+        // Simulation
+        if timer1.millis() < 5_000 {
+            temp_reading.buffer_top = None;
+        } else if timer1.millis() < 25_000 {
+            temp_reading.buffer_top = Some(22.4);
+        } else if timer1.millis() < 35_000 {
+            temp_reading.buffer_top = Some(33.8);
+        } else {
+            temp_reading.buffer_top = Some(18.5);
+        }
+        // Error Handling
+        if temp_reading.buffer_top.is_none() {
+            state = State::Error;
+        }
+
+        // Handle Statemachine
+        new = state != state_last;
+        state_last = state;
+        if new {
+            state_old = state;
+            time_state_start = timer1.millis();
+        }
+
+        time_in_state = timer1.millis() - time_state_start;
+
+        // State Machine
+        match state {
+            State::Error => {
+                if new {}
+                if temp_reading.buffer_top.is_some() {
+                    state = State::Init;
+                }
+            }
+
+            State::Init => {
+                if new {}
+                if time_in_state > 10_000 {
+                    state = State::BufferOff;
+                }
+            }
+
+            State::BufferOff => {
+                if new {}
+                if temp_reading.buffer_top.unwrap() > temperature::MIN_BUFFER_TEMPERATURE {
+                    state = State::BufferOn;
+                }
+            }
+
+            State::BufferOn => {
+                if new {}
+                if (temp_reading.buffer_top.unwrap() - temperature::BUFFER_HYSTERESIS)
+                    > temperature::MIN_BUFFER_TEMPERATURE
+                {
+                    state = State::BufferOff;
+                }
+            }
+
+            State::ActivatePump => if new {},
+        }
+
         // Update Ouptuts
         outputs.set_outputs();
+
+        if (timer1.millis() - time_send) > 1_000 {
+            time_send = timer1.millis();
+            serial.debug_str(state.to_string());
+            if let Some(temp) = temp_reading.buffer_top {
+                serial.debug_i32(temp as i32, "Puffer Oben");
+            } else {
+                serial.debug_str("None");
+            }
+            serial.debug_i32(time_in_state as i32, "Time in State");
+            serial.debug_str("-------------------");
+        }
     }
 }

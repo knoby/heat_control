@@ -9,5 +9,7 @@ elif [[ -e "/dev/ttyACM0" ]]; then
     avrdude  -patmega328p -carduino -P/dev/ttyACM0 -b115200 -D -Uflash:w:target/avr-atmega328p/release/heat_control.elf:e
     picocom -b 9600 --imap lfcrlf /dev/ttyACM0
 else
-    echo "No Target found"
+    echo "QEMU"
+    qemu-system-avr -machine uno -bios target/avr-atmega328p/release/heat_control.elf -serial stdio -s -S
+    #qemu-system-avr -machine uno -bios target/avr-atmega328p/release/heat_control.elf -serial stdio 
 fi
