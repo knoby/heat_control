@@ -11,14 +11,14 @@ pub struct Timer1 {}
 impl Timer1 {
     pub fn new(tc1: chip::TC1) -> Self {
         // Set the Clock Source
-        tc1.tccr1b.write(|w| w.cs1().prescale_1024());
+        tc1.tccr1b.write(|w| w.cs1().prescale_64());
 
         // Config timer to count to specific value and than reset
         tc1.tccr1a.write(|w| w.wgm1().bits(0b00));
         tc1.tccr1b.modify(|_, w| w.wgm1().bits(0b01));
 
-        // Set the Output Compare Register to 15625 = 16_000_000/1025 => 1s
-        tc1.ocr1a.write(|w| unsafe { w.bits(15625) });
+        // Set the Output Compare Register to 250_000= 16_000_000/64 => 1s => 250 = 1s
+        tc1.ocr1a.write(|w| unsafe { w.bits(250) });
 
         // Enable Interrupt on Output Compare Match
         tc1.timsk1.write(|w| w.ocie1a().set_bit());

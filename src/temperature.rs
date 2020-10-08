@@ -1,15 +1,15 @@
 use crate::hal;
 use crate::onewire;
 use hal::prelude::*;
-use ufmt::uwrite;
+//use ufmt::uwrite;
 
-const BUFFER_TOP_SENSOR_ADD: [u8; 8] = [0x28, 0xFF, 0x4B, 0x96, 0x74, 0x16, 0x04, 0x6F];
+const BUFFER_TOP_SENSOR_ADD: [u8; 8] = [40, 255, 123, 88, 85, 22, 3, 123];
 const BUFFER_BUTTOM_SENSOR_ADD: [u8; 8] = [0x28, 0xFF, 0x2F, 0x96, 0x74, 0x16, 0x04, 0x61];
 const WARM_WATER_SENSOR_ADD: [u8; 8] = [0x28, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
 const BOILER_SENSOR_ADD: [u8; 8] = [40, 255, 65, 130, 88, 22, 4, 203];
 
-pub const MIN_BUFFER_TEMPERATURE: f32 = 55.0; // °C
-pub const BUFFER_HYSTERESIS: f32 = 5.0; // K
+pub const MIN_BUFFER_TEMPERATURE: f32 = 25.0; // °C
+pub const BUFFER_HYSTERESIS: f32 = 2.0; // K
 
 const _ALARM_TEMP_LOW: i8 = 5;
 const _ALARM_TEMP_HIGH: i8 = 95;
@@ -55,7 +55,7 @@ impl Sensors {
         }
     }
 
-    pub fn print_sensors(&mut self, mut serial: &mut hal::usart::WriteUsart0<crate::Clock>) {
+    pub fn print_sensors(&mut self, serial: &mut dyn core::fmt::Write) {
         // Create the search state
         let mut search_state = onewire::SearchState::new();
 
@@ -71,7 +71,7 @@ impl Sensors {
                 Ok(Some(rom_no)) => {
                     serial.write_str("Found Device: ").ok();
                     for byte in rom_no.iter() {
-                        uwrite!(&mut serial, "{}", byte).ok();
+                        //uwrite!(&mut serial, "{}", byte).ok();
                         serial.write_char(' ').ok();
                     }
                     serial.write_char('\n').ok();
@@ -84,7 +84,7 @@ impl Sensors {
                     if e == onewire::Error::SearchEnd {
                         serial.write_str("No more devices found\n").ok();
                     } else {
-                        serial.write_str("An Error Occured").ok();
+                        serial.write_str("An Error Occured\n").ok();
                     };
                     break;
                 }

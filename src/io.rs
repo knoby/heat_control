@@ -66,7 +66,7 @@ impl Outputs {
     }
 
     pub fn set_burner_inhibit(&mut self, value: bool) {
-        self.burner_inhibit = value
+        self.burner_inhibit = value;
     }
 
     pub fn set_pump_buffer(&mut self, value: bool) {
