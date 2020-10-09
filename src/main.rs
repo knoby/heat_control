@@ -11,6 +11,7 @@ use hal::prelude::*;
 
 type Clock = hal::clock::MHz16;
 
+mod display;
 mod io;
 mod onewire;
 mod serial_logger;
@@ -18,12 +19,6 @@ mod temperature;
 mod timer;
 
 const DISPLAY_ADD_I2C: u8 = 0x27;
-
-type Display = hd44780_driver::HD44780<
-    hd44780_driver::bus::I2CBus<
-        hal::i2c::I2c<Clock, hal::port::mode::Input<hal::port::mode::PullUp>>,
-    >,
->;
 
 #[derive(PartialEq, Copy, Clone)]
 #[repr(u8)]
@@ -59,7 +54,7 @@ fn setup() -> (
     io::Outputs,
     io::Inputs,
     temperature::Sensors,
-    Display,
+    display::Display,
 ) {
     // Get Peripherals for configuration
     let peripherals = chip::Peripherals::take().unwrap();
@@ -132,7 +127,8 @@ fn setup() -> (
         )
         .unwrap();
 
-    display.write_str("Heat Control", &mut delay).ok();
+    let display = display::Display::new(display);
+
     serial.debug_str("Done");
 
     // ------------------
@@ -296,13 +292,14 @@ fn main() -> ! {
         outputs.set_outputs();
 
         if new {
-            let mut delay = hal::delay::Delay::<Clock>::new();
             serial.debug_str(state.to_string());
             serial.debug_str(state_old.to_string());
             serial.debug_i16(time, "Time");
             serial.debug_str("-------------------");
-            display.clear(&mut delay).ok();
-            display.write_str(state.to_string(), &mut delay).ok();
+
+            display.set_state(state);
+            display.set_temp_top(temp_reading.buffer_top);
+            display.set_temp_bottom(temp_reading.buffer_buttom);
         }
     }
 }
