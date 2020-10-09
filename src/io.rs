@@ -87,7 +87,7 @@ impl Outputs {
 }
 
 pub struct Inputs {
-    start_burner: bool,
+    pub start_burner: bool,
     start_burner_pin: InputPin,
     warm_water_pump: bool,
     warm_water_pump_pin: InputPin,

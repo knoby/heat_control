@@ -1,15 +1,14 @@
 use crate::hal;
 use crate::onewire;
 use hal::prelude::*;
-//use ufmt::uwrite;
 
 const BUFFER_TOP_SENSOR_ADD: [u8; 8] = [40, 255, 123, 88, 85, 22, 3, 123];
 const BUFFER_BUTTOM_SENSOR_ADD: [u8; 8] = [0x28, 0xFF, 0x2F, 0x96, 0x74, 0x16, 0x04, 0x61];
 const WARM_WATER_SENSOR_ADD: [u8; 8] = [0x28, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
 const BOILER_SENSOR_ADD: [u8; 8] = [40, 255, 65, 130, 88, 22, 4, 203];
 
-pub const MIN_BUFFER_TEMPERATURE: f32 = 25.0; // °C
-pub const BUFFER_HYSTERESIS: f32 = 2.0; // K
+pub const MIN_BUFFER_TEMPERATURE: i16 = 25; // °C
+pub const BUFFER_HYSTERESIS: i16 = 2; // K
 
 const _ALARM_TEMP_LOW: i8 = 5;
 const _ALARM_TEMP_HIGH: i8 = 95;
@@ -19,10 +18,10 @@ const MEASURERESOLUTION: onewire::ds18b20::MeasureResolution =
 /// Temperatures in the plant
 #[derive(Default, PartialEq)]
 pub struct PlantTemperatures {
-    pub warm_water: Option<f32>,
-    pub buffer_top: Option<f32>,
-    pub buffer_buttom: Option<f32>,
-    pub boiler: Option<f32>,
+    pub warm_water: Option<i16>,
+    pub buffer_top: Option<i16>,
+    pub buffer_buttom: Option<i16>,
+    pub boiler: Option<i16>,
 }
 
 pub struct Sensors {

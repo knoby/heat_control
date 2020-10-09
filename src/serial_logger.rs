@@ -29,7 +29,7 @@ impl SerialLogger {
         self.serial.write_char('\n').ok();
     }
 
-    fn write_i32(&mut self, var: i32) {
+    fn write_i16(&mut self, var: i16) {
         let mut devider = 10;
         let mut var_32 = var;
         if var_32 < 0 {
@@ -37,7 +37,7 @@ impl SerialLogger {
             var_32 *= -1;
         }
         // find starting devider
-        while var_32 > devider {
+        while var_32 >= devider {
             devider *= 10;
         }
         devider /= 10;
@@ -52,7 +52,7 @@ impl SerialLogger {
         }
     }
 
-    fn write_num(&mut self, num: i32) {
+    fn write_num(&mut self, num: i16) {
         match num {
             0 => self.serial.write_str("0").ok(),
             1 => self.serial.write_str("1").ok(),
@@ -73,10 +73,10 @@ impl SerialLogger {
         self.new_line();
     }
 
-    fn i32(&mut self, var: i32, text: &str) {
+    fn i16(&mut self, var: i16, text: &str) {
         self.serial.write_str(text).ok();
         self.serial.write_str(": ").ok();
-        self.write_i32(var);
+        self.write_i16(var);
         self.new_line();
     }
 
@@ -97,9 +97,9 @@ impl SerialLogger {
         }
     }
 
-    pub fn debug_i32(&mut self, var: i32, text: &str) {
+    pub fn debug_i16(&mut self, var: i16, text: &str) {
         if self.debug {
-            self.i32(var, text);
+            self.i16(var, text);
         }
     }
     pub fn debug_str(&mut self, text: &str) {
@@ -112,9 +112,9 @@ impl SerialLogger {
             self.bool(var, text);
         }
     }
-    pub fn info_i32(&mut self, var: i32, text: &str) {
+    pub fn info_i16(&mut self, var: i16, text: &str) {
         if self.info {
-            self.i32(var, text);
+            self.i16(var, text);
         }
     }
     pub fn info_str(&mut self, text: &str) {

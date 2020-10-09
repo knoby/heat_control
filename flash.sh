@@ -11,5 +11,5 @@ elif [[ -e "/dev/ttyACM0" ]]; then
 else
     echo "QEMU"
     qemu-system-avr -machine uno -bios target/avr-atmega328p/release/heat_control.elf -serial stdio -s -S
-    #qemu-system-avr -machine uno -bios target/avr-atmega328p/release/heat_control.elf -serial stdio 
+    qemu-system-avr -machine uno -bios target/avr-atmega328p/release/heat_control.elf -serial stdio 
 fi

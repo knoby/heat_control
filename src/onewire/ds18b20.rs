@@ -109,7 +109,7 @@ impl DS18B20 {
         &mut self,
         bus: &mut super::OneWire<IO>,
         delay: &mut dyn DelayUs<u16>,
-    ) -> Result<f32, super::Error<E>> {
+    ) -> Result<i16, super::Error<E>> {
         bus.reset_and_select_rom(&self.device.rom_no, delay)?;
 
         bus.write_byte(Command::ReadScratchpad as u8, delay)?;
@@ -122,10 +122,10 @@ impl DS18B20 {
 
         let devider = if let Some(resolution) = self.resolution {
             match resolution {
-                MeasureResolution::Bit09 => 2.0,
-                MeasureResolution::Bit10 => 4.0,
-                MeasureResolution::Bit11 => 8.0,
-                MeasureResolution::Bit12 => 16.0,
+                MeasureResolution::Bit09 => 2,
+                MeasureResolution::Bit10 => 4,
+                MeasureResolution::Bit11 => 8,
+                MeasureResolution::Bit12 => 16,
             }
         } else {
             return Err(super::Error::DataError);
@@ -138,7 +138,7 @@ impl DS18B20 {
             return Err(super::Error::DataError);
         }
 
-        let temperature = temperature_raw as f32 / devider;
+        let temperature = temperature_raw / devider;
 
         Ok(temperature)
     }
