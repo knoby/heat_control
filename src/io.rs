@@ -24,6 +24,7 @@ impl PartialEq for Outputs {
     }
 }
 
+#[allow(dead_code)]
 impl Outputs {
     pub fn new(
         burner_inhibit_pin: OutputPin,
@@ -95,6 +96,7 @@ pub struct Inputs {
     heating_pump_pin: InputPin,
 }
 
+#[allow(dead_code)]
 impl Inputs {
     pub fn new(
         start_burner_pin: InputPin,

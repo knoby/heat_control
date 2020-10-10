@@ -1,5 +1,4 @@
 use atmega328p_hal as hal;
-use hal::prelude::*;
 
 type I2CDisplay = hd44780_driver::HD44780<
     hd44780_driver::bus::I2CBus<
@@ -62,9 +61,9 @@ impl Display {
             // Parse the
             let mut devider = 100;
             let mut var = temp;
-            for index in 1..4 {
+            for byte in out[1..4].iter_mut() {
                 let decimal = var / devider;
-                out[index] = Self::num2char(decimal);
+                *byte = Self::num2char(decimal);
                 var -= decimal * devider;
                 devider /= 10;
             }

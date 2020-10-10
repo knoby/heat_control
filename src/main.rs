@@ -22,7 +22,7 @@ const DISPLAY_ADD_I2C: u8 = 0x27;
 
 #[derive(PartialEq, Copy, Clone)]
 #[repr(u8)]
-enum State {
+pub enum State {
     Init,
     BufferOff,
     BufferOn,
