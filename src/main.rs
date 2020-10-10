@@ -5,6 +5,9 @@
 // Pull in the panic handler from panic-halt
 extern crate avr_std_stub;
 
+#[macro_use]
+extern crate machine;
+
 use atmega328p_hal as hal;
 use atmega328p_hal::atmega328p as chip;
 use hal::prelude::*;
@@ -15,6 +18,7 @@ mod display;
 mod io;
 mod onewire;
 mod serial_logger;
+mod statemachine;
 mod temperature;
 mod timer;
 
@@ -175,23 +179,15 @@ fn main() -> ! {
     // Init the hardware
     let (mut serial, timer1, mut outputs, mut inputs, mut sensors, mut display) = setup();
 
-    // Some Variables used in the loop
-    let mut temp_reading: temperature::PlantTemperatures;
-    let mut new: bool;
-    let mut time = 0_i16;
-    let mut time_state_start = time;
-    let mut time_in_state: i16;
-    let mut state = State::Init;
-    let mut state_last = State::Init;
-    let mut state_old = State::Init;
+    let mut state = statemachine::HeatControl::init(0);
 
     // Main Loop
     loop {
-        time = timer1.millis() as i16;
+        let time = timer1.millis();
 
         inputs.get_inputs();
 
-        temp_reading = sensors.read_temperatures().unwrap_or_default();
+        let temp_reading = sensors.read_temperatures().unwrap_or_default();
 
         #[cfg(feature = "simulation")]
         {
@@ -210,98 +206,25 @@ fn main() -> ! {
             }
         }
 
-        // Error Handling
-        if temp_reading.buffer_top.is_none() {
-            state = State::Error;
-        }
-
-        // Handle Statemachine
-        new = state != state_last;
-        if new {
-            state_old = state_last;
-            time_state_start = time;
-        }
-        state_last = state;
-
-        time_in_state = time.wrapping_sub(time_state_start);
-
         // State Machine
-        match state {
-            State::Error => {
-                if new {
-                    outputs.set_burner_inhibit(false);
-                    outputs.set_magnet_valve_buffer(false);
-                    outputs.set_pump_buffer(false);
-                }
-                if temp_reading.buffer_top.is_some() {
-                    state = State::Init;
+        let new_state = match state {
+            statemachine::HeatControl::Init(_) => state.on_tick(statemachine::Tick { time }),
+            statemachine::HeatControl::BufferDisabled(_) => {
+                if let Some(temp) = temp_reading.buffer_top {
+                    if temp > temperature::MIN_BUFFER_TEMPERATURE {
+                        state.on_enable(statemachine::Enable {})
+                    } else {
+                        state
+                    }
+                } else {
+                    state
                 }
             }
+            _ => state,
+        };
 
-            State::Init => {
-                if new {
-                    outputs.set_burner_inhibit(false);
-                    outputs.set_magnet_valve_buffer(false);
-                    outputs.set_pump_buffer(false);
-                }
-                if time_in_state > 2 {
-                    state = State::BufferOff;
-                }
-            }
-
-            State::BufferOff => {
-                if new {
-                    outputs.set_burner_inhibit(false);
-                    outputs.set_magnet_valve_buffer(false);
-                    outputs.set_pump_buffer(false);
-                }
-                if (temp_reading.buffer_top.unwrap() > temperature::MIN_BUFFER_TEMPERATURE)
-                    && !inputs.get_start_burner()
-                {
-                    state = State::BufferOn;
-                }
-            }
-
-            State::BufferOn => {
-                if new {
-                    outputs.set_burner_inhibit(true);
-                    outputs.set_magnet_valve_buffer(true);
-                    outputs.set_pump_buffer(false);
-                }
-                if temp_reading.buffer_top.unwrap()
-                    < (temperature::MIN_BUFFER_TEMPERATURE - temperature::BUFFER_HYSTERESIS)
-                {
-                    state = State::BufferOff;
-                } else if inputs.get_start_burner()
-                    && ((state_old == State::BufferOff) || (time_in_state > 30))
-                {
-                    state = State::ActivatePump;
-                }
-            }
-
-            State::ActivatePump => {
-                if new {
-                    outputs.set_burner_inhibit(true);
-                    outputs.set_magnet_valve_buffer(true);
-                    outputs.set_pump_buffer(true);
-                }
-                if time_in_state >= 30 {
-                    state = State::BufferOn;
-                }
-            }
-        }
+        state = new_state;
 
         outputs.set_outputs();
-
-        if new {
-            serial.debug_str(state.to_string());
-            serial.debug_str(state_old.to_string());
-            serial.debug_i16(time, "Time");
-            serial.debug_str("-------------------");
-
-            display.set_state(state);
-            display.set_temp_top(temp_reading.buffer_top);
-            display.set_temp_bottom(temp_reading.buffer_buttom);
-        }
     }
 }
