@@ -193,19 +193,21 @@ fn main() -> ! {
 
         temp_reading = sensors.read_temperatures().unwrap_or_default();
 
-        // Simulation
-        if time < 5 {
-            temp_reading.buffer_top = None;
-            inputs.start_burner = false;
-        } else if time < 10 {
-            temp_reading.buffer_top = Some(33);
-            inputs.start_burner = false;
-        } else if time < 20 {
-            temp_reading.buffer_top = Some(33);
-            inputs.start_burner = true;
-        } else {
-            temp_reading.buffer_top = Some(32);
-            inputs.start_burner = true;
+        #[cfg(feature = "simulation")]
+        {
+            if time < 5 {
+                temp_reading.buffer_top = None;
+                inputs.start_burner = false;
+            } else if time < 10 {
+                temp_reading.buffer_top = Some(33);
+                inputs.start_burner = false;
+            } else if time < 20 {
+                temp_reading.buffer_top = Some(33);
+                inputs.start_burner = true;
+            } else {
+                temp_reading.buffer_top = Some(32);
+                inputs.start_burner = true;
+            }
         }
 
         // Error Handling

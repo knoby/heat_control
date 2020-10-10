@@ -27,7 +27,7 @@ features = ["rt"]
 git = "https://github.com/Rahix/avr-hal"
 
 [features]
-i2c_display = []
+simulation = []
 
 [profile.dev]
 lto = true
@@ -38,5 +38,5 @@ panic = "abort"
 codegen-units = 1
 debug = true
 lto = true
-opt-level = 2
+opt-level = "s"
 panic = "abort"
