@@ -24,6 +24,11 @@ mod timer;
 
 const DISPLAY_ADD_I2C: u8 = 0x27;
 
+const MIN_CYCLE_TIME: u32 = 1_000;
+const WATCHDOG_TIME: hal::wdt::Timeout = hal::wdt::Timeout::Ms2000;
+const DISPLAY_UPDATE_TIME: u32 = 5_000;
+const SERIAL_UPDATE_TIME: u32 = 10_000;
+
 #[derive(PartialEq, Copy, Clone)]
 #[repr(u8)]
 pub enum State {
@@ -59,6 +64,7 @@ fn setup() -> (
     io::Inputs,
     temperature::Sensors,
     display::Display,
+    hal::wdt::Wdt,
 ) {
     // Get Peripherals for configuration
     let peripherals = chip::Peripherals::take().unwrap();
@@ -67,6 +73,12 @@ fn setup() -> (
     let _portb = peripherals.PORTB.split();
     let portc = peripherals.PORTC.split();
     let portd = peripherals.PORTD.split();
+
+    // ------------------
+    // Watchdog
+    // ------------------
+    let mut watchdog = hal::wdt::Wdt::new(&peripherals.CPU.mcusr, peripherals.WDT);
+    watchdog.start(WATCHDOG_TIME);
 
     // ------------------
     // Serial Port
@@ -171,15 +183,20 @@ fn setup() -> (
         inputs,
         temperature_sensors,
         display,
+        watchdog,
     )
 }
 
+use core::clone::Clone;
 #[hal::entry]
 fn main() -> ! {
     // Init the hardware
-    let (mut serial, timer1, mut outputs, mut inputs, mut sensors, mut display) = setup();
+    let (mut serial, timer1, mut outputs, mut inputs, mut sensors, mut display, mut watchdog) =
+        setup();
 
-    let mut state = statemachine::HeatControl::init(0);
+    let mut state = statemachine::HeatControl::init(timer1.millis());
+    let mut time_display = 0;
+    let mut time_serial = 0;
 
     // Main Loop
     loop {
@@ -187,18 +204,22 @@ fn main() -> ! {
 
         inputs.get_inputs();
 
+        #[cfg(not(feature = "simulation"))]
         let temp_reading = sensors.read_temperatures().unwrap_or_default();
 
         #[cfg(feature = "simulation")]
+        let mut temp_reading = sensors.read_temperatures().unwrap_or_default();
+
+        #[cfg(feature = "simulation")]
         {
-            if time < 5 {
+            if time < 5_000 {
                 temp_reading.buffer_top = None;
                 inputs.start_burner = false;
-            } else if time < 10 {
+            } else if time < 20_000 {
                 temp_reading.buffer_top = Some(33);
                 inputs.start_burner = false;
-            } else if time < 20 {
-                temp_reading.buffer_top = Some(33);
+            } else if time < 40_000 {
+                temp_reading.buffer_top = Some(34);
                 inputs.start_burner = true;
             } else {
                 temp_reading.buffer_top = Some(32);
@@ -207,24 +228,126 @@ fn main() -> ! {
         }
 
         // State Machine
-        let new_state = match state {
-            statemachine::HeatControl::Init(_) => state.on_tick(statemachine::Tick { time }),
-            statemachine::HeatControl::BufferDisabled(_) => {
-                if let Some(temp) = temp_reading.buffer_top {
-                    if temp > temperature::MIN_BUFFER_TEMPERATURE {
-                        state.on_enable(statemachine::Enable {})
-                    } else {
-                        state
-                    }
-                } else {
-                    state
+        {
+            use statemachine::*;
+            use temperature::*;
+
+            let new_state = match state {
+                statemachine::HeatControl::Init(_) => {
+                    outputs.set_burner_inhibit(false);
+                    outputs.set_magnet_valve_buffer(false);
+                    outputs.set_pump_buffer(false);
+
+                    state.on_tick(Tick { time })
                 }
-            }
-            _ => state,
-        };
 
-        state = new_state;
+                statemachine::HeatControl::BufferDisabled(_) => {
+                    outputs.set_burner_inhibit(false);
+                    outputs.set_magnet_valve_buffer(false);
+                    outputs.set_pump_buffer(false);
 
+                    match (temp_reading.buffer_top, inputs.get_start_burner()) {
+                        (Some(temp), false)
+                            if temp >= (MIN_BUFFER_TEMPERATURE + BUFFER_HYSTERESIS) =>
+                        {
+                            state.on_enable(Enable {})
+                        }
+                        (_, _) => state,
+                    }
+                }
+
+                statemachine::HeatControl::BufferEnabled(_) => {
+                    outputs.set_burner_inhibit(true);
+                    outputs.set_magnet_valve_buffer(true);
+                    outputs.set_pump_buffer(false);
+
+                    match (temp_reading.buffer_top, inputs.get_start_burner()) {
+                        (None, _) => state.on_disable(Disable {}),
+                        (Some(temp), _) if temp < MIN_BUFFER_TEMPERATURE => {
+                            state.on_disable(Disable {})
+                        }
+                        (Some(_), true) => state.on_activate_pump(ActivatePump { time }),
+                        (_, _) => state,
+                    }
+                }
+
+                statemachine::HeatControl::PumpActive(_) => {
+                    outputs.set_burner_inhibit(true);
+                    outputs.set_magnet_valve_buffer(true);
+                    outputs.set_pump_buffer(true);
+
+                    state.on_tick(statemachine::Tick { time })
+                }
+
+                statemachine::HeatControl::PumpPause(_) => {
+                    outputs.set_burner_inhibit(true);
+                    outputs.set_magnet_valve_buffer(true);
+                    outputs.set_pump_buffer(false);
+
+                    state.on_tick(statemachine::Tick { time })
+                }
+
+                _ => state,
+            };
+
+            state = new_state;
+        }
+
+        // Set Outputs
         outputs.set_outputs();
+
+        // Handle Display
+        if time.wrapping_sub(time_display) >= DISPLAY_UPDATE_TIME {
+            display.set_state(state.to_string());
+            display.set_temp_top(temp_reading.buffer_top);
+            display.set_temp_bottom(temp_reading.buffer_buttom);
+            time_display = time;
+        }
+
+        // Handle Serial Connection
+        if time.wrapping_sub(time_serial) >= SERIAL_UPDATE_TIME {
+            serial.debug_str(state.to_string());
+
+            if let Some(temp) = temp_reading.buffer_top {
+                serial.debug_i16(temp, "Buffer Top");
+            } else {
+                serial.debug_str("Buffer Top: None");
+            }
+            if let Some(temp) = temp_reading.buffer_buttom {
+                serial.debug_i16(temp, "Buffer Bottom");
+            } else {
+                serial.debug_str("Buffer Bottom: None");
+            }
+            if let Some(temp) = temp_reading.warm_water {
+                serial.debug_i16(temp, "Warmwater");
+            } else {
+                serial.debug_str("Warmwater: None");
+            }
+            if let Some(temp) = temp_reading.boiler {
+                serial.debug_i16(temp, "Boiler");
+            } else {
+                serial.debug_str("Boiler: None");
+            }
+
+            serial.debug_bool(inputs.get_start_burner(), "Start Burner");
+            serial.debug_bool(inputs.get_warm_water_pump(), "Warmwater Pump");
+            serial.debug_bool(inputs.get_heating_pump(), "Heating Pump");
+
+            serial.debug_bool(outputs.get_burner_inhibit(), "Burner Inhibit");
+            serial.debug_bool(outputs.get_magnet_valve_buffer(), "Magnet Valve Buffer");
+            serial.debug_bool(outputs.get_pump_buffer(), "Pump Buffer");
+
+            time_serial = time;
+        }
+
+        // Feed the watchdog
+        watchdog.feed();
+
+        // Get time for calculating to this point. Delay next loop to have a nearly const cycle time
+        let calc_time = timer1.millis().wrapping_sub(time);
+        if calc_time == MIN_CYCLE_TIME {
+            let delay_time = MIN_CYCLE_TIME - calc_time;
+            hal::delay::Delay::<Clock>::new().delay_ms(delay_time as u16);
+        }
     }
 }

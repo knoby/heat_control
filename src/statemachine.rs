@@ -1,30 +1,52 @@
 machine!(
     enum HeatControl {
-        Init { time: u8 },
+        Init { time: u32 },
         BufferDisabled,
         BufferEnabled,
+        PumpActive { time: u32 },
+        PumpPause { time: u32 },
     }
 );
 
+impl HeatControl {
+    pub fn to_string(&self) -> &'static str {
+        match self {
+            HeatControl::Error => "Error",
+            HeatControl::Init(_) => "Init",
+            HeatControl::BufferDisabled(_) => "Buffer Disabled",
+            HeatControl::BufferEnabled(_) => "Buffer Enabled",
+            HeatControl::PumpActive(_) => "Pump Active",
+            HeatControl::PumpPause(_) => "Pump Pause",
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct Tick {
-    pub time: u16,
+    pub time: u32,
 }
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct Enable {}
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub struct Disable {}
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub struct ActivatePump {
+    pub time: u32,
+}
 
 transitions!(HeatControl,
 [
     (Init, Tick) => [BufferDisabled, Init],
     (BufferDisabled, Enable) => BufferEnabled,
-    (BufferEnabled, Disable) => BufferDisabled
+    (BufferEnabled, Disable) => BufferDisabled,
+    (BufferEnabled, ActivatePump) => PumpActive,
+    (PumpActive, Tick) => [PumpActive, PumpPause],
+    (PumpPause, Tick) => [PumpPause, BufferEnabled]
 ]);
 
 impl Init {
     pub fn on_tick(self, input: Tick) -> HeatControl {
-        if true {
+        if input.time.wrapping_sub(self.time) > 5_000 {
             HeatControl::BufferDisabled(BufferDisabled {})
         } else {
             HeatControl::Init(self)
@@ -41,5 +63,29 @@ impl BufferDisabled {
 impl BufferEnabled {
     pub fn on_disable(self, _: Disable) -> BufferDisabled {
         BufferDisabled {}
+    }
+
+    pub fn on_activate_pump(self, input: ActivatePump) -> PumpActive {
+        PumpActive { time: input.time }
+    }
+}
+
+impl PumpActive {
+    pub fn on_tick(self, input: Tick) -> HeatControl {
+        if input.time.wrapping_sub(self.time) > 60_000 {
+            HeatControl::PumpPause(PumpPause { time: input.time })
+        } else {
+            HeatControl::PumpActive(self)
+        }
+    }
+}
+
+impl PumpPause {
+    pub fn on_tick(self, input: Tick) -> HeatControl {
+        if input.time.wrapping_sub(self.time) > 60_000 {
+            HeatControl::BufferEnabled(BufferEnabled {})
+        } else {
+            HeatControl::PumpPause(self)
+        }
     }
 }

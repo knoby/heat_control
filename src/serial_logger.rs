@@ -102,21 +102,25 @@ impl SerialLogger {
             self.i16(var, text);
         }
     }
+
     pub fn debug_str(&mut self, text: &str) {
         if self.debug {
             self.str(text);
         }
     }
+
     pub fn info_bool(&mut self, var: bool, text: &str) {
         if self.info {
             self.bool(var, text);
         }
     }
+
     pub fn info_i16(&mut self, var: i16, text: &str) {
         if self.info {
             self.i16(var, text);
         }
     }
+
     pub fn info_str(&mut self, text: &str) {
         if self.info {
             self.str(text);

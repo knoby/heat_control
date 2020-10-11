@@ -15,38 +15,50 @@ impl Display {
     pub fn new(mut display: I2CDisplay) -> Self {
         let mut delay = hal::delay::Delay::<super::Clock>::new();
         display.clear(&mut delay).ok();
+        display.write_str("Heat Control", &mut delay).ok();
         Self { display, delay }
     }
 
-    pub fn set_state(&mut self, state: super::State) {
+    pub fn set_state(&mut self, state: &str) {
         self.display.set_cursor_pos(0, &mut self.delay).ok();
-        self.display
-            .write_str("                ", &mut self.delay)
-            .ok();
-        self.display.set_cursor_pos(0, &mut self.delay).ok();
-        self.display
-            .write_str(state.to_string(), &mut self.delay)
-            .ok();
+        self.display.write_str(state, &mut self.delay).ok();
+        match state.len() {
+            0 => self.display.write_bytes(&[0x20; 16], &mut self.delay).ok(),
+            1 => self.display.write_bytes(&[0x20; 15], &mut self.delay).ok(),
+            2 => self.display.write_bytes(&[0x20; 14], &mut self.delay).ok(),
+            3 => self.display.write_bytes(&[0x20; 13], &mut self.delay).ok(),
+            4 => self.display.write_bytes(&[0x20; 12], &mut self.delay).ok(),
+            5 => self.display.write_bytes(&[0x20; 11], &mut self.delay).ok(),
+            6 => self.display.write_bytes(&[0x20; 10], &mut self.delay).ok(),
+            7 => self.display.write_bytes(&[0x20; 9], &mut self.delay).ok(),
+            8 => self.display.write_bytes(&[0x20; 8], &mut self.delay).ok(),
+            9 => self.display.write_bytes(&[0x20; 7], &mut self.delay).ok(),
+            10 => self.display.write_bytes(&[0x20; 6], &mut self.delay).ok(),
+            11 => self.display.write_bytes(&[0x20; 5], &mut self.delay).ok(),
+            12 => self.display.write_bytes(&[0x20; 4], &mut self.delay).ok(),
+            13 => self.display.write_bytes(&[0x20; 3], &mut self.delay).ok(),
+            14 => self.display.write_bytes(&[0x20; 2], &mut self.delay).ok(),
+            15 => self.display.write_bytes(&[0x20; 1], &mut self.delay).ok(),
+            _ => Some(()),
+        };
     }
 
     pub fn set_temp_top(&mut self, temp: Option<i16>) {
-        self.display.set_cursor_pos(0x40, &mut self.delay).ok();
-        self.display.write_str("        ", &mut self.delay).ok();
         self.display.set_cursor_pos(0x40, &mut self.delay).ok();
         self.display.write_str("O:", &mut self.delay).ok();
         self.display
             .write_bytes(&Self::temp_to_bytes(temp), &mut self.delay)
             .ok();
+        self.display.write_bytes(&[0x20; 2], &mut self.delay).ok();
     }
 
     pub fn set_temp_bottom(&mut self, temp: Option<i16>) {
-        self.display.set_cursor_pos(0x48, &mut self.delay).ok();
-        self.display.write_str("        ", &mut self.delay).ok();
         self.display.set_cursor_pos(0x48, &mut self.delay).ok();
         self.display.write_str("U:", &mut self.delay).ok();
         self.display
             .write_bytes(&Self::temp_to_bytes(temp), &mut self.delay)
             .ok();
+        self.display.write_bytes(&[0x20; 2], &mut self.delay).ok();
     }
 
     fn temp_to_bytes(temp: Option<i16>) -> [u8; 4] {
