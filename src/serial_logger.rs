@@ -109,6 +109,18 @@ impl SerialLogger {
         }
     }
 
+    pub fn debug_option_i16(&mut self, var: Option<i16>, text: &str) {
+        if self.debug {
+            if let Some(temp) = var {
+                self.debug_i16(temp, text);
+            } else {
+                self.serial.write_str(text).ok();
+                self.serial.write_str(": ").ok();
+                self.serial.write_str("None").ok();
+            }
+        }
+    }
+
     pub fn info_bool(&mut self, var: bool, text: &str) {
         if self.info {
             self.bool(var, text);
@@ -125,5 +137,45 @@ impl SerialLogger {
         if self.info {
             self.str(text);
         }
+    }
+
+    pub fn mqtt_bool(&mut self, var: bool, text: &str) {
+        if self.mqtt {
+            self.mqtt_prefix();
+            self.serial.write_str(text).ok();
+            self.serial.write_str(":=").ok();
+            if var {
+                self.serial.write_str("On").ok();
+            } else {
+                self.serial.write_str("Off").ok();
+            }
+            self.new_line();
+        }
+    }
+
+    pub fn mqtt_option_i16(&mut self, var: Option<i16>, text: &str) {
+        if self.mqtt {
+            if let Some(var) = var {
+                self.mqtt_prefix();
+                self.serial.write_str(text).ok();
+                self.serial.write_str(":=").ok();
+                self.write_i16(var);
+                self.new_line();
+            }
+        }
+    }
+
+    pub fn mqtt_str(&mut self, var: &str, topic: &str) {
+        if self.mqtt {
+            self.mqtt_prefix();
+            self.serial.write_str(topic).ok();
+            self.serial.write_str(":=").ok();
+            self.serial.write_str(var).ok();
+            self.new_line();
+        }
+    }
+
+    fn mqtt_prefix(&mut self) {
+        self.serial.write_str("--MQTT--").ok();
     }
 }

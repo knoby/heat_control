@@ -27,6 +27,7 @@ const DISPLAY_ADD_I2C: u8 = 0x27;
 const MIN_CYCLE_TIME: u32 = 1_000;
 const WATCHDOG_TIME: hal::wdt::Timeout = hal::wdt::Timeout::Ms2000;
 const DISPLAY_UPDATE_TIME: u32 = 5_000;
+const MQTT_UPDATE_TIME: u32 = 15_000;
 const SERIAL_UPDATE_TIME: u32 = 10_000;
 
 #[derive(PartialEq, Copy, Clone)]
@@ -93,7 +94,7 @@ fn setup() -> (
     )
     .split();
 
-    let mut serial = serial_logger::SerialLogger::new(serial, true, true, false);
+    let mut serial = serial_logger::SerialLogger::new(serial, false, false, true);
 
     serial.info_str("Heat Control Init");
 
@@ -196,7 +197,9 @@ fn main() -> ! {
 
     let mut state = statemachine::HeatControl::init(timer1.millis());
     let mut time_display = 0;
+    let mut time_mqtt: u32 = 0;
     let mut time_serial = 0;
+    let mut old_state = state.to_u8();
 
     // Main Loop
     loop {
@@ -246,13 +249,17 @@ fn main() -> ! {
                     outputs.set_magnet_valve_buffer(false);
                     outputs.set_pump_buffer(false);
 
-                    match (temp_reading.buffer_top, inputs.get_start_burner()) {
-                        (Some(temp), false)
+                    match (
+                        temp_reading.buffer_top,
+                        inputs.get_start_burner(),
+                        inputs.get_heating_pump(),
+                    ) {
+                        (Some(temp), false, true)
                             if temp >= (MIN_BUFFER_TEMPERATURE + BUFFER_HYSTERESIS) =>
                         {
                             state.on_enable(Enable {})
                         }
-                        (_, _) => state,
+                        (_, _, _) => state,
                     }
                 }
 
@@ -261,13 +268,18 @@ fn main() -> ! {
                     outputs.set_magnet_valve_buffer(true);
                     outputs.set_pump_buffer(false);
 
-                    match (temp_reading.buffer_top, inputs.get_start_burner()) {
-                        (None, _) => state.on_disable(Disable {}),
-                        (Some(temp), _) if temp < MIN_BUFFER_TEMPERATURE => {
+                    match (
+                        temp_reading.buffer_top,
+                        inputs.get_start_burner(),
+                        inputs.get_heating_pump(),
+                    ) {
+                        (None, _, _) => state.on_disable(Disable {}),
+                        (Some(temp), _, _) if temp < MIN_BUFFER_TEMPERATURE => {
                             state.on_disable(Disable {})
                         }
-                        (Some(_), true) => state.on_activate_pump(ActivatePump { time }),
-                        (_, _) => state,
+                        (_, _, false) => state.on_disable(Disable {}),
+                        (Some(_), true, _) => state.on_activate_pump(ActivatePump { time }),
+                        (_, _, _) => state,
                     }
                 }
 
@@ -293,41 +305,51 @@ fn main() -> ! {
             state = new_state;
         }
 
+        let current_state = state.to_u8();
+
         // Set Outputs
         outputs.set_outputs();
 
         // Handle Display
-        if time.wrapping_sub(time_display) >= DISPLAY_UPDATE_TIME {
+        if (time.wrapping_sub(time_display) >= DISPLAY_UPDATE_TIME) || (current_state != old_state)
+        {
             display.set_state(state.to_string());
             display.set_temp_top(temp_reading.buffer_top);
             display.set_temp_bottom(temp_reading.buffer_buttom);
             time_display = time;
         }
 
-        // Handle Serial Connection
-        if time.wrapping_sub(time_serial) >= SERIAL_UPDATE_TIME {
+        // Handle MQTT Messages
+        if (time.wrapping_sub(time_mqtt) >= MQTT_UPDATE_TIME) || (old_state != current_state) {
             serial.debug_str(state.to_string());
 
-            if let Some(temp) = temp_reading.buffer_top {
-                serial.debug_i16(temp, "Buffer Top");
-            } else {
-                serial.debug_str("Buffer Top: None");
-            }
-            if let Some(temp) = temp_reading.buffer_buttom {
-                serial.debug_i16(temp, "Buffer Bottom");
-            } else {
-                serial.debug_str("Buffer Bottom: None");
-            }
-            if let Some(temp) = temp_reading.warm_water {
-                serial.debug_i16(temp, "Warmwater");
-            } else {
-                serial.debug_str("Warmwater: None");
-            }
-            if let Some(temp) = temp_reading.boiler {
-                serial.debug_i16(temp, "Boiler");
-            } else {
-                serial.debug_str("Boiler: None");
-            }
+            serial.mqtt_option_i16(temp_reading.buffer_top, "Temperature/Puffer_Oben");
+            serial.mqtt_option_i16(temp_reading.buffer_buttom, "Temperature/Puffer_Unten");
+            serial.mqtt_option_i16(temp_reading.warm_water, "Temperature/Warmwasser");
+            serial.mqtt_option_i16(temp_reading.boiler, "Temperature/Kessel");
+
+            serial.mqtt_bool(inputs.get_start_burner(), "Inputs/BrennerStart");
+            serial.mqtt_bool(inputs.get_warm_water_pump(), "Inputs/Pumpe_Warmwasser");
+            serial.mqtt_bool(inputs.get_heating_pump(), "Inputs/Pumpe_Heizung");
+
+            serial.mqtt_bool(outputs.get_burner_inhibit(), "Outputs/Brenner_Sperre");
+            serial.mqtt_bool(
+                outputs.get_magnet_valve_buffer(),
+                "Outputs/Magnetventil_Puffer",
+            );
+            serial.mqtt_bool(outputs.get_pump_buffer(), "Outputs/Pumpe_Puffer");
+
+            time_mqtt = time;
+        }
+
+        // Handle Serial Connection Debug
+        if (time.wrapping_sub(time_serial) >= SERIAL_UPDATE_TIME) || (current_state != old_state) {
+            serial.debug_str(state.to_string());
+
+            serial.debug_option_i16(temp_reading.buffer_top, "Buffer Top");
+            serial.debug_option_i16(temp_reading.buffer_buttom, "Buffer Bottom");
+            serial.debug_option_i16(temp_reading.warm_water, "Warmwater");
+            serial.debug_option_i16(temp_reading.boiler, "Boiler");
 
             serial.debug_bool(inputs.get_start_burner(), "Start Burner");
             serial.debug_bool(inputs.get_warm_water_pump(), "Warmwater Pump");
@@ -339,6 +361,8 @@ fn main() -> ! {
 
             time_serial = time;
         }
+
+        old_state = state.to_u8();
 
         // Feed the watchdog
         watchdog.feed();

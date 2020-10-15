@@ -19,6 +19,17 @@ impl HeatControl {
             HeatControl::PumpPause(_) => "Pump Pause",
         }
     }
+
+    pub fn to_u8(&self) -> u8 {
+        match self {
+            HeatControl::Error => 0,
+            HeatControl::Init(_) => 1,
+            HeatControl::BufferDisabled(_) => 2,
+            HeatControl::BufferEnabled(_) => 3,
+            HeatControl::PumpActive(_) => 4,
+            HeatControl::PumpPause(_) => 5,
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
