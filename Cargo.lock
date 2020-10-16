@@ -3,7 +3,7 @@
 [[package]]
 name = "atmega328p-hal"
 version = "0.1.0"
-source = "git+https://github.com/Rahix/avr-hal#e93881942b4b32a865c0d503d6a7512451e12846"
+source = "git+https://github.com/Rahix/avr-hal#7337cd76cd96f2d27701b137396d94a06d3a501d"
 dependencies = [
  "avr-device",
  "avr-hal-generic",
@@ -29,13 +29,13 @@ checksum = "7173b28cd7dab80ad2a30269688de29a4b1e542923e805cffc4ef471a2e0407d"
 dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.7",
- "syn 1.0.42",
+ "syn 1.0.44",
 ]
 
 [[package]]
 name = "avr-hal-generic"
 version = "0.1.0"
-source = "git+https://github.com/Rahix/avr-hal#e93881942b4b32a865c0d503d6a7512451e12846"
+source = "git+https://github.com/Rahix/avr-hal#7337cd76cd96f2d27701b137396d94a06d3a501d"
 dependencies = [
  "avr-device",
  "cfg-if",
@@ -233,9 +233,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "1.0.42"
+version = "1.0.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c51d92969d209b54a98397e1b91c8ae82d8c87a7bb87df0b29aa2ad81454228"
+checksum = "e03e57e4fcbfe7749842d53e24ccb9aa12b7252dbe5e91d2acad31834c8b8fdd"
 dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.7",
@@ -262,7 +262,7 @@ dependencies = [
  "proc-macro-hack",
  "proc-macro2 1.0.24",
  "quote 1.0.7",
- "syn 1.0.42",
+ "syn 1.0.44",
 ]
 
 [[package]]
