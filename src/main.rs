@@ -25,8 +25,8 @@ mod timer;
 const DISPLAY_ADD_I2C: u8 = 0x27;
 
 const MIN_CYCLE_TIME: u32 = 1_000;
-const WATCHDOG_TIME: hal::wdt::Timeout = hal::wdt::Timeout::Ms2000;
-const DISPLAY_UPDATE_TIME: u32 = 5_000;
+const WATCHDOG_TIME: hal::wdt::Timeout = hal::wdt::Timeout::Ms4000;
+const DISPLAY_UPDATE_TIME: u32 = 10_000;
 const MQTT_UPDATE_TIME: u32 = 15_000;
 const SERIAL_UPDATE_TIME: u32 = 10_000;
 
@@ -104,7 +104,7 @@ fn setup() -> (
     serial.debug_str("Init IOs");
 
     let inputs = io::Inputs::new(
-        portc.pc3.into_floating_input(&portc.ddr).downgrade(),
+        portc.pc2.into_floating_input(&portc.ddr).downgrade(),
         portc.pc0.into_floating_input(&portc.ddr).downgrade(),
         portc.pc1.into_floating_input(&portc.ddr).downgrade(),
     );
@@ -299,7 +299,12 @@ fn main() -> ! {
                     state.on_tick(statemachine::Tick { time })
                 }
 
-                _ => state,
+                _ => {
+                    outputs.set_burner_inhibit(true);
+                    outputs.set_magnet_valve_buffer(true);
+                    outputs.set_pump_buffer(false);
+                    state
+                }
             };
 
             state = new_state;
@@ -369,7 +374,7 @@ fn main() -> ! {
 
         // Get time for calculating to this point. Delay next loop to have a nearly const cycle time
         let calc_time = timer1.millis().wrapping_sub(time);
-        if calc_time == MIN_CYCLE_TIME {
+        if calc_time <= MIN_CYCLE_TIME {
             let delay_time = MIN_CYCLE_TIME - calc_time;
             hal::delay::Delay::<Clock>::new().delay_ms(delay_time as u16);
         }

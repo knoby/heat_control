@@ -3,7 +3,7 @@
 [[package]]
 name = "atmega328p-hal"
 version = "0.1.0"
-source = "git+https://github.com/Rahix/avr-hal#7337cd76cd96f2d27701b137396d94a06d3a501d"
+source = "git+https://github.com/Rahix/avr-hal?rev=0c6cf1675c2724354f1adeaeee69992acd371e80#0c6cf1675c2724354f1adeaeee69992acd371e80"
 dependencies = [
  "avr-device",
  "avr-hal-generic",
@@ -35,7 +35,7 @@ dependencies = [
 [[package]]
 name = "avr-hal-generic"
 version = "0.1.0"
-source = "git+https://github.com/Rahix/avr-hal#7337cd76cd96f2d27701b137396d94a06d3a501d"
+source = "git+https://github.com/Rahix/avr-hal?rev=0c6cf1675c2724354f1adeaeee69992acd371e80#0c6cf1675c2724354f1adeaeee69992acd371e80"
 dependencies = [
  "avr-device",
  "cfg-if",

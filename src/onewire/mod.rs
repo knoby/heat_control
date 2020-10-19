@@ -73,7 +73,7 @@ impl<E: Sized, IO: InputPin<Error = E> + OutputPin<Error = E>> OneWire<IO> {
         // Read the input
         for _ in 0..6 {
             line |= self.io_pin.is_low()?;
-            delay.delay_us(10);
+            delay.delay_us(20);
         }
 
         Ok(line)
@@ -84,11 +84,11 @@ impl<E: Sized, IO: InputPin<Error = E> + OutputPin<Error = E>> OneWire<IO> {
         // Set line to low
         self.io_pin.set_low()?;
         // Wait time depending on the bit value
-        delay.delay_us(if bit { 10 } else { 65 });
+        delay.delay_us(if bit { 10 } else { 75 });
         // Write to high again
         self.io_pin.set_high()?;
         // Wait until the Slot is over
-        delay.delay_us(if bit { 70 } else { 5 });
+        delay.delay_us(if bit { 80 } else { 10 });
         Ok(())
     }
 
@@ -96,13 +96,13 @@ impl<E: Sized, IO: InputPin<Error = E> + OutputPin<Error = E>> OneWire<IO> {
         // Set line to low to start
         self.io_pin.set_low()?;
         // Wati at least 1 us
-        delay.delay_us(2);
+        delay.delay_us(10);
         // Try to set the line to high
         self.io_pin.set_high()?;
         //Wait until the end of the read window
-        delay.delay_us(5);
+        delay.delay_us(10);
         let bit = self.io_pin.is_high();
-        delay.delay_us(53);
+        delay.delay_us(43);
         Ok(bit?)
     }
 

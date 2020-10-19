@@ -26,6 +26,7 @@ version = "0.4.0"
 [dependencies.atmega328p-hal]
 features = ["rt"]
 git = "https://github.com/Rahix/avr-hal"
+rev = "0c6cf1675c2724354f1adeaeee69992acd371e80"
 
 [features]
 simulation = []
