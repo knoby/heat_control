@@ -344,6 +344,8 @@ fn main() -> ! {
             );
             serial.mqtt_bool(outputs.get_pump_buffer(), "Outputs/Pumpe_Puffer");
 
+            serial.mqtt_str(state.to_string(), "State");
+
             time_mqtt = time;
         }
 
