@@ -7,8 +7,8 @@ const BUFFER_BUTTOM_SENSOR_ADD: [u8; 8] = [0x28, 0xFF, 0x2F, 0x96, 0x74, 0x16, 0
 const BUFFER_TOP_SENSOR_ADD: [u8; 8] = [0x28, 0xFF, 0x4B, 0x96, 0x74, 0x16, 0x04, 0x6F];
 const BOILER_SENSOR_ADD: [u8; 8] = [0x28, 0xFF, 0x7B, 0x58, 0x55, 0x16, 0x03, 0x7B];
 
-pub const MIN_BUFFER_TEMPERATURE: i16 = 55; // °C
-pub const BUFFER_HYSTERESIS: i16 = 5; // K
+pub const MIN_BUFFER_TEMPERATURE: i16 = 550; // m°C
+pub const BUFFER_HYSTERESIS: i16 = 50; // mK
 
 const _ALARM_TEMP_LOW: i8 = 5;
 const _ALARM_TEMP_HIGH: i8 = 95;

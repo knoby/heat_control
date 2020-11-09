@@ -114,8 +114,11 @@ impl DS18B20 {
 
         bus.write_byte(Command::ReadScratchpad as u8, delay)?;
 
-        let mut scratchpad = [0_u8; 8];
+        let mut scratchpad = [0_u8; 9];
         bus.read_bytes(&mut scratchpad, delay)?;
+
+        // Check the crc of the scratchpad
+        Self::check_scratchpad_crc(&scratchpad)?;
 
         // Get resolution
         self.resolution = scratchpad[4].try_into().ok();
@@ -138,7 +141,7 @@ impl DS18B20 {
             return Err(super::Error::DataError);
         }
 
-        let temperature = temperature_raw / devider;
+        let temperature = (temperature_raw * 10) / devider;
 
         Ok(temperature)
     }
@@ -173,5 +176,17 @@ impl DS18B20 {
         self.resolution = Some(resolution);
 
         Ok(resolution)
+    }
+
+    fn check_scratchpad_crc<E: Sized>(add: &[u8; 9]) -> Result<(), super::Error<E>> {
+        let crc_rec = add[8];
+        let mut crc = crc_any::CRCu8::crc8maxim();
+        crc.digest(&add[0..8]);
+        let crc_calc = crc.get_crc();
+        if crc_calc == crc_rec {
+            Ok(())
+        } else {
+            Err(super::Error::CrcError(crc_calc, crc_rec))
+        }
     }
 }

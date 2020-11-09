@@ -52,6 +52,32 @@ impl SerialLogger {
         }
     }
 
+    fn write_i16_fixedpoint(&mut self, var: i16) {
+        let mut devider = 10;
+        let mut var_32 = var;
+        if var_32 < 0 {
+            self.serial.write_str("-").ok();
+            var_32 *= -1;
+        }
+        // find starting devider
+        while var_32 >= devider {
+            devider *= 10;
+        }
+        devider /= 10;
+        loop {
+            let decimal = var_32 / devider;
+            self.write_num(decimal);
+            var_32 -= decimal * devider;
+            devider /= 10;
+            if devider == 1 {
+                self.serial.write_str(".").ok();
+            }
+            if devider == 0 {
+                break;
+            }
+        }
+    }
+
     fn write_num(&mut self, num: i16) {
         match num {
             0 => self.serial.write_str("0").ok(),
@@ -159,7 +185,7 @@ impl SerialLogger {
                 self.mqtt_prefix();
                 self.serial.write_str(text).ok();
                 self.serial.write_str(":=").ok();
-                self.write_i16(var);
+                self.write_i16_fixedpoint(var);
                 self.new_line();
             }
         }

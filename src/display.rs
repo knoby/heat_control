@@ -61,8 +61,8 @@ impl Display {
         self.display.write_bytes(&[0x20; 2], &mut self.delay).ok();
     }
 
-    fn temp_to_bytes(temp: Option<i16>) -> [u8; 4] {
-        let mut out = [0; 4];
+    fn temp_to_bytes(temp: Option<i16>) -> [u8; 5] {
+        let mut out = [0; 5];
         if let Some(temp) = temp {
             // Check sign
             if temp < 0 {
@@ -80,8 +80,11 @@ impl Display {
                 devider /= 10;
             }
         } else {
-            out = [b'N', b'o', b'n', b'e'];
+            out = [b'N', b'o', b'n', b'e', b'!'];
         }
+        // Make decimal separator
+        out[4] = out[3];
+        out[3] = b'.';
         out
     }
 
