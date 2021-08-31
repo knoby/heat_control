@@ -1,7 +1,5 @@
 //! Definition of Structs for the input and outputs
-
-use atmega328p_hal as hal;
-use hal::prelude::*;
+use crate::hal;
 
 type OutputPin = hal::port::Pin<hal::port::mode::Output>;
 type InputPin = hal::port::Pin<hal::port::mode::Input<hal::port::mode::Floating>>;
@@ -44,21 +42,21 @@ impl Outputs {
     /// Set the physical outputs according to the setvalue
     pub fn set_outputs(&mut self) {
         if self.burner_inhibit {
-            self.burner_inhibit_pin.set_high().void_unwrap();
+            self.burner_inhibit_pin.set_high();
         } else {
-            self.burner_inhibit_pin.set_low().void_unwrap();
+            self.burner_inhibit_pin.set_low();
         }
 
         if self.magnet_valve_buffer {
-            self.magnet_valve_buffer_pin.set_high().void_unwrap();
+            self.magnet_valve_buffer_pin.set_high();
         } else {
-            self.magnet_valve_buffer_pin.set_low().void_unwrap();
+            self.magnet_valve_buffer_pin.set_low();
         }
 
         if self.pump_buffer {
-            self.pump_buffer_pin.set_high().void_unwrap();
+            self.pump_buffer_pin.set_high();
         } else {
-            self.pump_buffer_pin.set_low().void_unwrap();
+            self.pump_buffer_pin.set_low();
         }
     }
 
@@ -114,9 +112,9 @@ impl Inputs {
     }
 
     pub fn get_inputs(&mut self) {
-        self.start_burner = self.start_burner_pin.is_high().void_unwrap();
-        self.warm_water_pump = self.warm_water_pump_pin.is_high().void_unwrap();
-        self.heating_pump = self.heating_pump_pin.is_high().void_unwrap();
+        self.start_burner = self.start_burner_pin.is_high();
+        self.warm_water_pump = self.warm_water_pump_pin.is_high();
+        self.heating_pump = self.heating_pump_pin.is_high();
     }
 
     pub fn get_start_burner(&self) -> bool {

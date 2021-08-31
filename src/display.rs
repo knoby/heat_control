@@ -1,10 +1,6 @@
-use atmega328p_hal as hal;
+use crate::hal;
 
-type I2CDisplay = hd44780_driver::HD44780<
-    hd44780_driver::bus::I2CBus<
-        hal::i2c::I2c<super::Clock, hal::port::mode::Input<hal::port::mode::PullUp>>,
-    >,
->;
+type I2CDisplay = hd44780_driver::HD44780<hd44780_driver::bus::I2CBus<hal::i2c::I2c<super::Clock>>>;
 
 pub struct Display {
     display: I2CDisplay,

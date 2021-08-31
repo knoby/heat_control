@@ -6,4 +6,4 @@ target = "avr-atmega328p.json"
 build-std = ["core"]
 
 [target.'cfg(target_arch = "avr")']
-runner = "./flash.sh"
+runner = "ravedude uno --open-console --baudrate 57600"

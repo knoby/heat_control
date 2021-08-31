@@ -7,26 +7,27 @@ version = "0.1.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-avr-std-stub = "1.0.2"
-crc-any = {version = "2.3.5", default-features = false}
-embedded-hal = "0.2.3"
+avr-std-stub = "1.0.3"
+crc-any = {version = "2.3.12", default-features = false}
+embedded-hal = "0.2.6"
 machine = "0.3.0"
+ufmt = "0.1.0"
 
 [dependencies.avr-device]
 features = ["atmega328p"]
-version = "0.2.2"
+version = "0.3.1"
 
 [dependencies.void]
 default_features = false
-version = "*"
+version = "1.0.2"
 
 [dependencies.hd44780-driver]
 version = "0.4.0"
 
-[dependencies.atmega328p-hal]
-features = ["rt"]
-git = "https://github.com/Rahix/avr-hal"
-rev = "0c6cf1675c2724354f1adeaeee69992acd371e80"
+[dependencies.atmega-hal]
+features = ["rt", "atmega328p"]
+git = "https://github.com/knoby/avr-hal"
+rev = "930dec9f16bce3a0383154ccf86365d019a537f7"
 
 [features]
 simulation = []

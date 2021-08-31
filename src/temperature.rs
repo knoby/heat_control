@@ -1,6 +1,7 @@
+use embedded_hal::prelude::_embedded_hal_blocking_delay_DelayUs;
+
 use crate::hal;
 use crate::onewire;
-use hal::prelude::*;
 
 const WARM_WATER_SENSOR_ADD: [u8; 8] = [0x28, 0xFF, 0x2C, 0x99, 0x74, 0x16, 0x04, 0xB5];
 const BUFFER_BUTTOM_SENSOR_ADD: [u8; 8] = [0x28, 0xFF, 0x2F, 0x96, 0x74, 0x16, 0x04, 0x61];
@@ -25,7 +26,7 @@ pub struct PlantTemperatures {
 }
 
 pub struct Sensors {
-    bus: onewire::OneWire<hal::port::Pin<hal::port::mode::TriState>>,
+    bus: onewire::OneWire<hal::port::Pin<hal::port::mode::OpenDrain>>,
     warm_water: Option<onewire::DS18B20>,
     buffer_top: Option<onewire::DS18B20>,
     buffer_buttom: Option<onewire::DS18B20>,
@@ -34,7 +35,7 @@ pub struct Sensors {
 
 impl Sensors {
     /// Setup function
-    pub fn setup(pin: hal::port::Pin<hal::port::mode::TriState>) -> Self {
+    pub fn setup(pin: hal::port::Pin<hal::port::mode::OpenDrain>) -> Self {
         // Init the bus
         let mut bus = onewire::OneWire::new(pin);
         let mut delay = hal::delay::Delay::<crate::Clock>::new();
@@ -66,7 +67,7 @@ impl Sensors {
             return None;
         };
 
-        delay.delay_ms(MEASURERESOLUTION.conversion_time());
+        delay.delay_us(MEASURERESOLUTION.conversion_time() * 1_000);
 
         if let Some(sensor) = self.warm_water.as_mut() {
             temperatures.warm_water = sensor.read_temperature(&mut self.bus, &mut delay).ok();
@@ -89,7 +90,7 @@ impl Sensors {
 fn init_sensor(
     add: [u8; 8],
     _delay: &mut hal::delay::Delay<crate::Clock>,
-    _bus: &mut onewire::OneWire<hal::port::Pin<hal::port::mode::TriState>>,
+    _bus: &mut onewire::OneWire<hal::port::Pin<hal::port::mode::OpenDrain>>,
 ) -> Option<onewire::DS18B20> {
     onewire::DS18B20::new(add).ok()
 }

@@ -1,6 +1,6 @@
 //! Basic implementation of a timer to be able to calculate time in a state
 
-use atmega328p_hal::atmega328p as chip;
+use crate::chip;
 
 /// Holds the time since the application is running
 /// Is updated in an interrupt. A safe read to this is possibly in an interrupt free function

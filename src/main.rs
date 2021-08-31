@@ -8,9 +8,9 @@ extern crate avr_std_stub;
 #[macro_use]
 extern crate machine;
 
-use atmega328p_hal as hal;
-use atmega328p_hal::atmega328p as chip;
-use hal::prelude::*;
+use atmega_hal as hal;
+use atmega_hal::pac as chip;
+use embedded_hal::prelude::_embedded_hal_blocking_delay_DelayUs;
 
 type Clock = hal::clock::MHz16;
 
@@ -70,29 +70,22 @@ fn setup() -> (
     // Get Peripherals for configuration
     let peripherals = chip::Peripherals::take().unwrap();
 
-    // Get the ports
-    let _portb = peripherals.PORTB.split();
-    let portc = peripherals.PORTC.split();
-    let portd = peripherals.PORTD.split();
+    // Init the Pins
+    let pins = hal::pins!(peripherals);
 
     // ------------------
     // Watchdog
     // ------------------
-    let mut watchdog = hal::wdt::Wdt::new(&peripherals.CPU.mcusr, peripherals.WDT);
-    watchdog.start(WATCHDOG_TIME);
+    let mut watchdog = hal::wdt::Wdt::new(peripherals.WDT, &peripherals.CPU.mcusr);
+    watchdog.start(WATCHDOG_TIME).unwrap();
 
     // ------------------
     // Serial Port
     // ------------------
-    let rx = portd.pd0.into_floating_input(&portd.ddr);
-    let tx = portd.pd1.into_output(&portd.ddr);
-    let (_, serial) = hal::usart::Usart0::<Clock, hal::port::mode::Floating>::new(
-        peripherals.USART0,
-        rx,
-        tx,
-        9600,
-    )
-    .split();
+    let rx = pins.pd0.into_floating_input();
+    let tx = pins.pd1.into_output();
+    let (_, serial) =
+        hal::usart::Usart0::<Clock>::new(peripherals.USART0, rx, tx, 9600.into()).split();
 
     let mut serial = serial_logger::SerialLogger::new(serial, false, false, true);
 
@@ -104,15 +97,15 @@ fn setup() -> (
     serial.debug_str("Init IOs");
 
     let inputs = io::Inputs::new(
-        portc.pc2.into_floating_input(&portc.ddr).downgrade(),
-        portc.pc0.into_floating_input(&portc.ddr).downgrade(),
-        portc.pc1.into_floating_input(&portc.ddr).downgrade(),
+        pins.pc2.into_floating_input().downgrade(),
+        pins.pc0.into_floating_input().downgrade(),
+        pins.pc1.into_floating_input().downgrade(),
     );
 
     let outputs = io::Outputs::new(
-        portd.pd6.into_output(&portd.ddr).downgrade(),
-        portd.pd4.into_output(&portd.ddr).downgrade(),
-        portd.pd5.into_output(&portd.ddr).downgrade(),
+        pins.pd6.into_output().downgrade(),
+        pins.pd4.into_output().downgrade(),
+        pins.pd5.into_output().downgrade(),
     );
     serial.debug_str("Done");
 
@@ -121,13 +114,13 @@ fn setup() -> (
     // ------------------
 
     serial.debug_str("Init I2C Display");
-    let sda = portc.pc4.into_pull_up_input(&portc.ddr);
-    let scl = portc.pc5.into_pull_up_input(&portc.ddr);
+    let sda = pins.pc4.into_pull_up_input();
+    let scl = pins.pc5.into_pull_up_input();
 
     // Delay for display
     let mut delay = hal::delay::Delay::<Clock>::new();
     // Create the i2c bus
-    let i2c = hal::i2c::I2c::<Clock, _>::new(peripherals.TWI, sda, scl, 400_000);
+    let i2c = hal::i2c::I2c::<Clock>::new(peripherals.TWI, sda, scl, 400_000);
     // Create the display
     let mut display = hd44780_driver::HD44780::new_i2c(i2c, DISPLAY_ADD_I2C, &mut delay).unwrap();
 
@@ -153,7 +146,7 @@ fn setup() -> (
     // ------------------
     serial.debug_str("Init One Wire Sensors");
     // Split the pin for one wire
-    let pd2 = portd.pd2.into_tri_state(&portd.ddr);
+    let pd2 = pins.pd2.into_opendrain_tristate();
 
     // Setup the onewire bus
     let temperature_sensors = temperature::Sensors::setup(pd2.downgrade());
@@ -378,7 +371,7 @@ fn main() -> ! {
         let calc_time = timer1.millis().wrapping_sub(time);
         if calc_time <= MIN_CYCLE_TIME {
             let delay_time = MIN_CYCLE_TIME - calc_time;
-            hal::delay::Delay::<Clock>::new().delay_ms(delay_time as u16);
+            hal::delay::Delay::<Clock>::new().delay_us(delay_time as u16 * 1_000);
         }
     }
 }
